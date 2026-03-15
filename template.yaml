@@ -1,0 +1,27 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SplitSettle - AI Agent expense splitting MCP tool
+
+Globals:
+  Function:
+    Timeout: 10
+    MemorySize: 128
+    Runtime: python3.12
+
+Resources:
+  SplitSettleFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/split_settle/
+      Handler: handler.lambda_handler
+      Events:
+        SplitSettle:
+          Type: HttpApi
+          Properties:
+            Path: /split_settle
+            Method: post
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/split_settle"

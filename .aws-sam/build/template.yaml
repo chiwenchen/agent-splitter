@@ -1,0 +1,68 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SplitSettle - AI Agent expense splitting MCP tool
+Globals:
+  Function:
+    Timeout: 10
+    MemorySize: 128
+    Runtime: python3.13
+Resources:
+  SplitSettleApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Auth:
+        ApiKeyRequired: true
+  SplitSettleFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: SplitSettleFunction
+      Handler: handler.lambda_handler
+      Events:
+        SplitSettle:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: SplitSettleApi
+            Path: /split_settle
+            Method: post
+    Metadata:
+      SamResourceId: SplitSettleFunction
+  ApiKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties:
+      Name: split-settle-key
+      Enabled: true
+      StageKeys:
+      - RestApiId:
+          Ref: SplitSettleApi
+        StageName: prod
+  UsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    Properties:
+      UsagePlanName: split-settle-plan
+      ApiStages:
+      - ApiId:
+          Ref: SplitSettleApi
+        Stage: prod
+      Throttle:
+        RateLimit: 10
+        BurstLimit: 20
+  UsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties:
+      KeyId:
+        Ref: ApiKey
+      KeyType: API_KEY
+      UsagePlanId:
+        Ref: UsagePlan
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value:
+      Fn::Sub: https://${SplitSettleApi}.execute-api.${AWS::Region}.amazonaws.com/prod/split_settle
+  ApiKeyId:
+    Description: Run `aws apigateway get-api-key --api-key <id> --include-value --region
+      ap-northeast-1` to get the key value
+    Value:
+      Ref: ApiKey

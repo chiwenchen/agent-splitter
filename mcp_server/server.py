@@ -1,3 +1,12 @@
+"""
+SplitSettle MCP Server
+
+Transports:
+  stdio (default)  — for local Claude Code / Claude Desktop
+  http             — for remote agents (SSE), run with: python server.py --transport http [--port 8000]
+"""
+
+import argparse
 import asyncio
 import json
 import os
@@ -81,10 +90,60 @@ async def call_tool(name: str, arguments: dict):
     return [TextContent(type="text", text=json.dumps(result, ensure_ascii=False, indent=2))]
 
 
-async def main():
+async def run_stdio():
     async with stdio_server() as streams:
         await app.run(*streams, app.create_initialization_options())
 
 
+async def run_http(port: int):
+    try:
+        from mcp.server.sse import SseServerTransport
+        from starlette.applications import Starlette
+        from starlette.routing import Mount, Route
+        import uvicorn
+
+        sse = SseServerTransport("/messages/")
+
+        async def handle_sse(request):
+            async with sse.connect_sse(
+                request.scope, request.receive, request._send
+            ) as streams:
+                await app.run(*streams, app.create_initialization_options())
+
+        starlette_app = Starlette(
+            routes=[
+                Route("/sse", endpoint=handle_sse),
+                Mount("/messages/", app=sse.handle_post_message),
+            ]
+        )
+
+        print(f"SplitSettle MCP server running at http://0.0.0.0:{port}/sse")
+        config = uvicorn.Config(starlette_app, host="0.0.0.0", port=port, log_level="info")
+        server = uvicorn.Server(config)
+        await server.serve()
+
+    except ImportError as e:
+        print(f"Missing dependency for HTTP transport: {e}")
+        print("Install with: pip install starlette uvicorn")
+        raise
+
+
+def main():
+    parser = argparse.ArgumentParser(description="SplitSettle MCP Server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "http"],
+        default="stdio",
+        help="Transport type (default: stdio)",
+    )
+    parser.add_argument("--port", type=int, default=8000, help="Port for HTTP transport")
+    args = parser.parse_args()
+
+    if args.transport == "http":
+        asyncio.run(run_http(args.port))
+    else:
+        asyncio.run(run_stdio())
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

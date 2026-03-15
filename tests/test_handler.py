@@ -168,3 +168,75 @@ def test_lambda_handler_empty_body():
     event = {"body": None}
     response = lambda_handler(event, {})
     assert response["statusCode"] == 400
+
+
+# --- API Key tests ---
+
+def test_api_key_accepted(monkeypatch):
+    monkeypatch.setenv("API_KEY", "secret123")
+    event = {
+        "rawPath": "/split_settle",
+        "headers": {"x-api-key": "secret123"},
+        "body": json.dumps({
+            "currency": "TWD",
+            "participants": ["A", "B"],
+            "expenses": [{"paid_by": "A", "amount": 100, "split_among": ["A", "B"]}],
+        }),
+    }
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 200
+
+
+def test_api_key_rejected(monkeypatch):
+    monkeypatch.setenv("API_KEY", "secret123")
+    event = {
+        "rawPath": "/split_settle",
+        "headers": {"x-api-key": "wrong"},
+        "body": json.dumps({
+            "currency": "TWD",
+            "participants": ["A", "B"],
+            "expenses": [{"paid_by": "A", "amount": 100, "split_among": ["A", "B"]}],
+        }),
+    }
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 403
+
+
+def test_api_key_missing_header(monkeypatch):
+    monkeypatch.setenv("API_KEY", "secret123")
+    event = {
+        "rawPath": "/split_settle",
+        "headers": {},
+        "body": json.dumps({
+            "currency": "TWD",
+            "participants": ["A", "B"],
+            "expenses": [{"paid_by": "A", "amount": 100, "split_among": ["A", "B"]}],
+        }),
+    }
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 403
+
+
+def test_api_key_disabled_when_env_empty(monkeypatch):
+    monkeypatch.delenv("API_KEY", raising=False)
+    event = {
+        "rawPath": "/split_settle",
+        "body": json.dumps({
+            "currency": "TWD",
+            "participants": ["A", "B"],
+            "expenses": [{"paid_by": "A", "amount": 100, "split_among": ["A", "B"]}],
+        }),
+    }
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 200
+
+
+# --- OpenAPI schema test ---
+
+def test_openapi_endpoint():
+    event = {"rawPath": "/openapi.json"}
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 200
+    schema = json.loads(response["body"])
+    assert schema["openapi"].startswith("3.")
+    assert "/split_settle" in schema["paths"]

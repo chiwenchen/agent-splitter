@@ -117,6 +117,21 @@
       "Resource": "arn:aws:logs:ap-northeast-1:274571492950:log-group:/aws/lambda/agent-splitter-*"
     },
     {
+      "Sid": "DynamoDB",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:CreateTable",
+        "dynamodb:DeleteTable",
+        "dynamodb:DescribeTable",
+        "dynamodb:DescribeTimeToLive",
+        "dynamodb:UpdateTimeToLive",
+        "dynamodb:TagResource",
+        "dynamodb:UntagResource",
+        "dynamodb:ListTagsOfResource"
+      ],
+      "Resource": "arn:aws:dynamodb:ap-northeast-1:274571492950:table/agent-splitter-*"
+    },
+    {
       "Sid": "S3SamBucket",
       "Effect": "Allow",
       "Action": [

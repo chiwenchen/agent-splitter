@@ -259,7 +259,7 @@ def test_openapi_endpoint():
     assert response["statusCode"] == 200
     schema = json.loads(response["body"])
     assert schema["openapi"].startswith("3.")
-    assert "/split_settle" in schema["paths"]
+    assert "/v1/split_settle" in schema["paths"]
 
 
 def test_health_endpoint():

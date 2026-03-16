@@ -18,7 +18,7 @@ from mcp.types import TextContent, Tool
 
 API_URL = os.environ.get(
     "SPLIT_SETTLE_API_URL",
-    "https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com/split_settle",
+    "https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com/v1/split_settle",
 )
 API_KEY = os.environ.get("SPLIT_SETTLE_API_KEY", "")
 

@@ -112,3 +112,4 @@ SPLIT_SETTLE_API_KEY=<key> python3 mcp_server/server.py --transport http --port 
 # 其他 agent 連線: http://<your-server>:8000/sse
 ```
 
+

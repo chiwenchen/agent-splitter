@@ -40,7 +40,7 @@ Resources:
         SplitSettle:
           Type: HttpApi
           Properties:
-            Path: /split_settle
+            Path: /v1/split_settle
             Method: post
             ApiId: !Ref SplitSettleApi
         OpenApi:
@@ -53,7 +53,7 @@ Resources:
 Outputs:
   ApiUrl:
     Description: API Gateway endpoint URL
-    Value: !Sub "https://${SplitSettleApi}.execute-api.${AWS::Region}.amazonaws.com/split_settle"
+    Value: !Sub "https://${SplitSettleApi}.execute-api.${AWS::Region}.amazonaws.com/v1/split_settle"
   OpenApiUrl:
     Description: OpenAPI schema URL
     Value: !Sub "https://${SplitSettleApi}.execute-api.${AWS::Region}.amazonaws.com/openapi.json"

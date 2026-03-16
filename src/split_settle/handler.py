@@ -41,7 +41,7 @@ OPENAPI_SCHEMA = {
         }
     ],
     "paths": {
-        "/split_settle": {
+        "/v1/split_settle": {
             "post": {
                 "summary": "Calculate optimal settlement plan",
                 "description": "Given a list of participants and shared expenses, returns the minimum transfers needed to settle all debts.",

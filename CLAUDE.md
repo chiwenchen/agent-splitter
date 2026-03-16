@@ -33,7 +33,7 @@ API Gateway (HTTP API)       # AWS ap-northeast-1
 Lambda: src/split_settle/handler.py   # Pure Python, no dependencies
   - API Key validation (x-api-key header, disabled when API_KEY env var is empty)
   - GET /openapi.json  — OpenAPI 3.1 schema
-  - POST /split_settle — settlement calculation
+  - POST /v1/split_settle — settlement calculation
 ```
 
 **Lambda** (`src/split_settle/handler.py`) contains all business logic:
@@ -68,7 +68,7 @@ For local dev/tests: set `API_KEY=<any-value>` env var (bypasses Secrets Manager
 ## AWS Resources
 
 - Stack: `agent-splitter` (ap-northeast-1)
-- Endpoint: `https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com/split_settle`
+- Endpoint: `https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com/v1/split_settle`
 - OpenAPI: `https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com/openapi.json`
 - Budget: `monthly-10-usd-limit` — stops Lambda at $10/month (cwchen2000@gmail.com)
 - IAM User: `ClaudeCLI` with `SplitSettleDeployPolicy` (`iam/claudecli-policy.json`)
@@ -112,11 +112,23 @@ Other agents add via URL: `http://<your-server>:8000/sse`
 
 Alternatively, agents can call the HTTP API directly (no MCP needed):
 ```bash
-curl -X POST https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com/split_settle \
+curl -X POST https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com/v1/split_settle \
   -H "x-api-key: <key>" \
   -H "Content-Type: application/json" \
   -d '{ ... }'
 ```
+
+## Development Workflow
+
+When you finish implementing a feature or fix, follow these steps automatically:
+
+1. **Run tests** — `python3 -m pytest tests/ -v`. Fix any failures before proceeding.
+2. **Commit** — stage relevant files and create a descriptive commit.
+3. **Push & open PR** — push the branch and create a PR via `gh pr create`.
+4. **Monitor CI** — poll with `gh run list --branch <branch>` until all checks complete.
+5. **Fix CI failures** — if any check fails, inspect logs with `gh run view <run-id> --log-failed`, fix the issue, commit, and push. Repeat until all checks pass.
+
+Do this without waiting for explicit instruction — it is the expected end-to-end flow for every development task in this repo.
 
 ## Design Docs
 

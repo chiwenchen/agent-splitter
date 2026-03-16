@@ -168,6 +168,13 @@ def lambda_handler(event, context):
             "body": json.dumps(OPENAPI_SCHEMA),
         }
 
+    if path == "/health":
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"status": "ok"}),
+        }
+
     # API Key validation (only when API_KEY or SECRET_ARN env var is set)
     api_key = _get_api_key()
     if api_key:

@@ -251,3 +251,11 @@ def test_openapi_endpoint():
     schema = json.loads(response["body"])
     assert schema["openapi"].startswith("3.")
     assert "/split_settle" in schema["paths"]
+
+
+def test_health_endpoint():
+    event = {"rawPath": "/health"}
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["status"] == "ok"

@@ -1,8 +1,6 @@
 import json
 import os
 
-import boto3
-
 _cached_api_key = None
 
 
@@ -17,6 +15,7 @@ def _get_api_key() -> str:
         return _cached_api_key
     secret_arn = os.environ.get("SECRET_ARN", "")
     if secret_arn:
+        import boto3  # available in Lambda runtime; lazy to avoid test dependency
         client = boto3.client("secretsmanager", region_name="ap-northeast-1")
         response = client.get_secret_value(SecretId=secret_arn)
         _cached_api_key = response.get("SecretString", "")

@@ -9,6 +9,13 @@ Globals:
     Runtime: python3.13
 
 Resources:
+  SplitSettleApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      DefaultRouteSettings:
+        ThrottlingRateLimit: 10    # sustained requests per second
+        ThrottlingBurstLimit: 20   # max concurrent burst
+
   ApiKeySecret:
     Type: AWS::SecretsManager::Secret
     Properties:
@@ -35,19 +42,21 @@ Resources:
           Properties:
             Path: /split_settle
             Method: post
+            ApiId: !Ref SplitSettleApi
         OpenApi:
           Type: HttpApi
           Properties:
             Path: /openapi.json
             Method: get
+            ApiId: !Ref SplitSettleApi
 
 Outputs:
   ApiUrl:
     Description: API Gateway endpoint URL
-    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/split_settle"
+    Value: !Sub "https://${SplitSettleApi}.execute-api.${AWS::Region}.amazonaws.com/split_settle"
   OpenApiUrl:
     Description: OpenAPI schema URL
-    Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/openapi.json"
+    Value: !Sub "https://${SplitSettleApi}.execute-api.${AWS::Region}.amazonaws.com/openapi.json"
   SecretArn:
     Description: Secrets Manager ARN (retrieve key value from AWS Console or CLI)
     Value: !Ref ApiKeySecret

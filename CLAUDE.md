@@ -11,13 +11,6 @@ python3 -m pytest tests/ -v
 # Build and deploy to AWS
 PATH="/opt/homebrew/bin:$PATH" sam build && sam deploy
 
-# First-time IAM bootstrap (run once, then never again)
-aws cloudformation deploy \
-  --template-file iam/bootstrap.yaml \
-  --stack-name agent-splitter-iam \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --region ap-northeast-1
-
 # Install MCP server dependencies
 pip install -r mcp_server/requirements.txt
 
@@ -56,13 +49,21 @@ Lambda: src/split_settle/handler.py   # Pure Python, no dependencies
 
 ## API Key Setup
 
-API key auth is **disabled by default** (when `API_KEY` env var is empty on Lambda).
+API key is managed by **AWS Secrets Manager** (`split-settle/api-key`).
+- Auto-generated on first deploy (32-char random string)
+- Lambda reads it at runtime via boto3 (cached in global scope)
+- Not visible in Lambda config or CloudFormation outputs
 
-To enable:
-1. Generate a key: `python3 -c "import secrets; print(secrets.token_hex(16))"`
-2. Deploy: `sam deploy --parameter-overrides ApiKey=<generated-key>`
-3. Pass in requests: `x-api-key: <key>` header
-4. For MCP server: set `SPLIT_SETTLE_API_KEY=<key>` env var
+Retrieve the key after deploy:
+```bash
+aws secretsmanager get-secret-value \
+  --secret-id split-settle/api-key \
+  --query SecretString --output text \
+  --region ap-northeast-1
+```
+
+For MCP server: set `SPLIT_SETTLE_API_KEY=<value>` env var.
+For local dev/tests: set `API_KEY=<any-value>` env var (bypasses Secrets Manager).
 
 ## AWS Resources
 
@@ -70,32 +71,15 @@ To enable:
 - Endpoint: `https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com/split_settle`
 - OpenAPI: `https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com/openapi.json`
 - Budget: `monthly-10-usd-limit` — stops Lambda at $10/month (cwchen2000@gmail.com)
-- IAM User: `ClaudeCLI` with minimal `SplitSettleDeployPolicy` (CloudFormation + PassRole + S3 only)
-- IAM Role: `SplitSettleCFNRole` — assumed by CloudFormation service; holds all resource permissions
+- IAM User: `ClaudeCLI` with `SplitSettleDeployPolicy` (`iam/claudecli-policy.json`)
 
-## IAM Architecture
+## IAM Setup
 
-Two-role pattern so ClaudeCLI permissions never need to change:
+`ClaudeCLI` needs a single inline policy. Paste `iam/claudecli-policy.json` into AWS Console:
 
-```
-ClaudeCLI (IAM user)
-  └── SplitSettleDeployPolicy
-        ├── cloudformation:* on agent-splitter stack
-        ├── iam:PassRole → SplitSettleCFNRole
-        └── s3:* on SAM artifact bucket
+> IAM → Users → ClaudeCLI → Add permissions → Create inline policy → JSON tab
 
-SplitSettleCFNRole (assumed by cloudformation.amazonaws.com)
-  └── SplitSettleCFNPolicy
-        ├── lambda:* on agent-splitter-* functions
-        ├── apigateway:* (HTTP API)
-        ├── secretsmanager:* on split-settle/* secrets
-        ├── iam:* on agent-splitter-* roles (Lambda execution roles)
-        └── logs:* on /aws/lambda/agent-splitter-* groups
-```
-
-**When adding new AWS resource types to `template.yaml`**, only update `SplitSettleCFNRole` in `iam/bootstrap.yaml` — ClaudeCLI's policy stays fixed.
-
-Bootstrap stack: `agent-splitter-iam` (deployed once via `iam/bootstrap.yaml`)
+Covers: CloudFormation, Lambda, API Gateway, Secrets Manager, IAM (Lambda execution roles), CloudWatch Logs, S3 (SAM bucket). All scoped to `agent-splitter-*` resources.
 
 ## Claude Desktop Setup (local stdio)
 

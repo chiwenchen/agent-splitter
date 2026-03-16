@@ -163,3 +163,26 @@ You've hit your limit · resets 3am (Asia/Taipei)
 You've hit your limit · resets 3am (Asia/Taipei)
 [2026-03-17 01:02:34] [dev-1] Committing...
 [2026-03-17 01:02:34] [dev-1] Committing...
+[feat/dev-1/issue-26 0499994] feat: feat: unified participant model for flexible expense splitting (closes #26)
+ 9 files changed, 537 insertions(+)
+ create mode 100644 .claude/dev-loop/current-issue-dev-1.json
+ create mode 100644 .claude/dev-loop/current-issue-dev-2.json
+ create mode 100644 .claude/dev-loop/current-spec-dev-1.md
+ create mode 100644 .claude/dev-loop/current-spec-dev-2.md
+ create mode 100644 .claude/dev-loop/locks/issue-26.lock/owner
+ create mode 100644 .claude/dev-loop/locks/issue-27.lock/owner
+ create mode 100644 .claude/dev-loop/loop-dev-1.log
+ create mode 100644 .claude/dev-loop/loop-dev-2.log
+ create mode 100644 .claude/dev-loop/pids
+[2026-03-17 01:02:34] [dev-1] Pushing branch and creating PR...
+[2026-03-17 01:02:34] [dev-1] Pushing branch and creating PR...
+remote: 
+remote: Create a pull request for 'feat/dev-1/issue-26' on GitHub by visiting:        
+remote:      https://github.com/chiwenchen/agent-splitter/pull/new/feat/dev-1/issue-26        
+remote: 
+To github.com:chiwenchen/agent-splitter.git
+ * [new branch]      feat/dev-1/issue-26 -> feat/dev-1/issue-26
+branch 'feat/dev-1/issue-26' set up to track 'origin/feat/dev-1/issue-26'.
+[2026-03-17 01:02:41] [dev-1] PR created: https://github.com/chiwenchen/agent-splitter/pull/28
+[2026-03-17 01:02:41] [dev-1] PR created: https://github.com/chiwenchen/agent-splitter/pull/28
+[mark-done] dev-1: closing out issue #26 → https://github.com/chiwenchen/agent-splitter/pull/28

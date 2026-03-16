@@ -4,7 +4,6 @@ Description: SplitSettle - AI Agent expense splitting MCP tool
 
 Globals:
   Function:
-    Timeout: 10
     MemorySize: 128
     Runtime: python3.13
 
@@ -13,8 +12,8 @@ Resources:
     Type: AWS::Serverless::HttpApi
     Properties:
       DefaultRouteSettings:
-        ThrottlingRateLimit: 10    # sustained requests per second
-        ThrottlingBurstLimit: 20   # max concurrent burst
+        ThrottlingRateLimit: 10
+        ThrottlingBurstLimit: 20
 
   ApiKeySecret:
     Type: AWS::SecretsManager::Secret
@@ -22,20 +21,53 @@ Resources:
       Name: split-settle/api-key
       Description: API Key for SplitSettle service (x-api-key header)
 
+  AlchemySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: split-settle/alchemy-api-key
+      Description: Alchemy RPC URL for Base Mainnet payment verification
+
+  UsedPaymentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-used-payments"
+      BillingMode: PAY_PER_REQUEST
+      TableClass: STANDARD_INFREQUENT_ACCESS
+      AttributeDefinitions:
+        - AttributeName: tx_hash
+          AttributeType: S
+      KeySchema:
+        - AttributeName: tx_hash
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl_expiry
+        Enabled: true
+
   SplitSettleFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/split_settle/
       Handler: handler.lambda_handler
+      Timeout: 30
       Environment:
         Variables:
           SECRET_ARN: !Ref ApiKeySecret
+          ALCHEMY_SECRET_ARN: !Ref AlchemySecret
+          PAYMENTS_TABLE: !Ref UsedPaymentsTable
       Policies:
         - AWSLambdaBasicExecutionRole
         - Statement:
             - Effect: Allow
               Action: secretsmanager:GetSecretValue
               Resource: !Ref ApiKeySecret
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Ref AlchemySecret
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+              Resource: !GetAtt UsedPaymentsTable.Arn
       Events:
         SplitSettle:
           Type: HttpApi
@@ -49,6 +81,12 @@ Resources:
             Path: /openapi.json
             Method: get
             ApiId: !Ref SplitSettleApi
+        Health:
+          Type: HttpApi
+          Properties:
+            Path: /health
+            Method: get
+            ApiId: !Ref SplitSettleApi
 
 Outputs:
   ApiUrl:
@@ -58,5 +96,11 @@ Outputs:
     Description: OpenAPI schema URL
     Value: !Sub "https://${SplitSettleApi}.execute-api.${AWS::Region}.amazonaws.com/openapi.json"
   SecretArn:
-    Description: Secrets Manager ARN (retrieve key value from AWS Console or CLI)
+    Description: Secrets Manager ARN for API key
     Value: !Ref ApiKeySecret
+  AlchemySecretArn:
+    Description: Secrets Manager ARN for Alchemy RPC URL
+    Value: !Ref AlchemySecret
+  UsedPaymentsTableName:
+    Description: DynamoDB table for replay attack prevention
+    Value: !Ref UsedPaymentsTable

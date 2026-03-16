@@ -1,30 +1,175 @@
 import json
 import logging
 import os
+import time
+import urllib.request
 
 logger = logging.getLogger(__name__)
 
-_cached_api_key = None
+# x402 payment constants
+PAYMENT_RECIPIENT      = "0xD87C7aED8809BB2d50A7ABE69e286a2242bC3e68"
+PAYMENT_TOKEN_CONTRACT = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"  # USDC on Base
+PAYMENT_NETWORK        = "base-mainnet"
+PAYMENT_AMOUNT_DISPLAY = "0.001"
+PAYMENT_AMOUNT_MIN     = 1000  # 0.001 USDC at 6 decimals
+TRANSFER_EVENT_SIG     = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+
+_cached_api_key    = None
+_cached_alchemy_url = None
 
 
 def _get_api_key() -> str:
     global _cached_api_key
     if _cached_api_key is not None:
         return _cached_api_key
-    # Local dev: set API_KEY env var directly to bypass Secrets Manager
     direct_key = os.environ.get("API_KEY", "")
     if direct_key:
         _cached_api_key = direct_key
         return _cached_api_key
     secret_arn = os.environ.get("SECRET_ARN", "")
     if secret_arn:
-        import boto3  # available in Lambda runtime; lazy to avoid test dependency
+        import boto3
         client = boto3.client("secretsmanager", region_name="ap-northeast-1")
         response = client.get_secret_value(SecretId=secret_arn)
         _cached_api_key = response.get("SecretString", "")
     else:
         _cached_api_key = ""
     return _cached_api_key
+
+
+def _get_alchemy_url() -> str:
+    global _cached_alchemy_url
+    if _cached_alchemy_url is not None:
+        return _cached_alchemy_url
+    direct_url = os.environ.get("ALCHEMY_RPC_URL", "")
+    if direct_url:
+        _cached_alchemy_url = direct_url
+        return _cached_alchemy_url
+    secret_arn = os.environ.get("ALCHEMY_SECRET_ARN", "")
+    if secret_arn:
+        import boto3
+        client = boto3.client("secretsmanager", region_name="ap-northeast-1")
+        response = client.get_secret_value(SecretId=secret_arn)
+        _cached_alchemy_url = response.get("SecretString", "")
+    else:
+        _cached_alchemy_url = ""
+    return _cached_alchemy_url
+
+
+def _rpc_call(method: str, params: list) -> dict:
+    """Make a JSON-RPC call to Alchemy."""
+    url = _get_alchemy_url()
+    payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=8) as resp:
+        return json.loads(resp.read())
+
+
+def _is_tx_used(tx_hash: str) -> bool:
+    import boto3
+    table = os.environ.get("PAYMENTS_TABLE", "")
+    if not table:
+        return False
+    client = boto3.client("dynamodb", region_name="ap-northeast-1")
+    response = client.get_item(TableName=table, Key={"tx_hash": {"S": tx_hash}})
+    return "Item" in response
+
+
+def _mark_tx_used(tx_hash: str) -> None:
+    import boto3
+    table = os.environ.get("PAYMENTS_TABLE", "")
+    if not table:
+        return
+    client = boto3.client("dynamodb", region_name="ap-northeast-1")
+    ttl = int(time.time()) + 86400 * 365  # 1 year TTL
+    try:
+        client.put_item(
+            TableName=table,
+            Item={"tx_hash": {"S": tx_hash}, "ttl_expiry": {"N": str(ttl)}},
+            ConditionExpression="attribute_not_exists(tx_hash)",
+        )
+    except client.exceptions.ConditionalCheckFailedException:
+        raise ValueError("tx already used (race condition)")
+
+
+def _verify_payment(tx_hash: str, network: str) -> tuple:
+    """Verify an on-chain USDC payment. Returns (is_valid, error_message)."""
+    tx_hash = tx_hash.lower()
+
+    if network != PAYMENT_NETWORK:
+        return False, f"wrong network: expected {PAYMENT_NETWORK}, got {network}"
+
+    if _is_tx_used(tx_hash):
+        return False, "tx already used"
+
+    # Fetch receipt from Alchemy
+    try:
+        result = _rpc_call("eth_getTransactionReceipt", [tx_hash])
+    except Exception as e:
+        logger.exception("Alchemy RPC error")
+        return False, "payment verification unavailable"
+
+    receipt = result.get("result")
+    if receipt is None:
+        return False, "transaction not found or not yet mined"
+
+    if receipt.get("status") != "0x1":
+        return False, "transaction reverted"
+
+    # Check at least 1 confirmation
+    try:
+        block_result = _rpc_call("eth_blockNumber", [])
+        current_block = int(block_result["result"], 16)
+        tx_block = int(receipt["blockNumber"], 16)
+        if current_block - tx_block < 1:
+            return False, "transaction not yet confirmed"
+    except Exception:
+        logger.exception("block number check failed")
+        return False, "payment verification unavailable"
+
+    # Parse ERC-20 Transfer logs
+    recipient_padded = "000000000000000000000000" + PAYMENT_RECIPIENT[2:].lower()
+    for log in receipt.get("logs", []):
+        topics = log.get("topics", [])
+        if len(topics) < 3:
+            continue
+        if topics[0].lower() != TRANSFER_EVENT_SIG:
+            continue
+        if log.get("address", "").lower() != PAYMENT_TOKEN_CONTRACT.lower():
+            continue
+        if topics[2].lower() != "0x" + recipient_padded:
+            continue
+        amount = int(log.get("data", "0x0"), 16)
+        if amount < PAYMENT_AMOUNT_MIN:
+            return False, f"amount too low: got {amount}, need {PAYMENT_AMOUNT_MIN}"
+        # Valid payment found — mark as used
+        try:
+            _mark_tx_used(tx_hash)
+        except ValueError as e:
+            return False, str(e)
+        return True, ""
+
+    return False, "no valid USDC transfer found in transaction logs"
+
+
+def _payment_required_response(reason: str = "") -> dict:
+    body = {
+        "error": "Payment Required",
+        "x402": {
+            "amount": PAYMENT_AMOUNT_DISPLAY,
+            "currency": "USDC",
+            "network": PAYMENT_NETWORK,
+            "recipient": PAYMENT_RECIPIENT,
+            "token_contract": PAYMENT_TOKEN_CONTRACT,
+            "instructions": (
+                f"Send >= {PAYMENT_AMOUNT_DISPLAY} USDC on {PAYMENT_NETWORK} to the recipient address, "
+                'then retry with header: X-PAYMENT: {"tx_hash": "0x...", "network": "base-mainnet"}'
+            ),
+        },
+    }
+    if reason:
+        body["reason"] = reason
+    return {"statusCode": 402, "headers": {"Content-Type": "application/json"}, "body": json.dumps(body)}
 
 
 OPENAPI_SCHEMA = {
@@ -179,16 +324,36 @@ def lambda_handler(event, context):
             "body": json.dumps({"status": "ok"}),
         }
 
-    # API Key validation (only when API_KEY or SECRET_ARN env var is set)
-    api_key = _get_api_key()
-    if api_key:
-        provided = (event.get("headers") or {}).get("x-api-key", "")
-        if provided != api_key:
-            return {
-                "statusCode": 403,
-                "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({"error": "Forbidden: invalid or missing x-api-key"}),
-            }
+    headers = event.get("headers") or {}
+    x_payment = headers.get("x-payment") or headers.get("X-Payment") or headers.get("X-PAYMENT") or ""
+
+    if x_payment:
+        # x402 flow: verify on-chain payment
+        try:
+            payment_data = json.loads(x_payment)
+            tx_hash = payment_data.get("tx_hash", "")
+            network = payment_data.get("network", "")
+        except (json.JSONDecodeError, AttributeError):
+            return _payment_required_response("malformed X-PAYMENT header")
+        if not tx_hash or not network:
+            return _payment_required_response("X-PAYMENT must include tx_hash and network")
+        valid, error = _verify_payment(tx_hash, network)
+        if not valid:
+            return _payment_required_response(error)
+    else:
+        # Legacy API key flow
+        api_key = _get_api_key()
+        if api_key:
+            provided = headers.get("x-api-key", "")
+            if provided != api_key:
+                return {
+                    "statusCode": 403,
+                    "headers": {"Content-Type": "application/json"},
+                    "body": json.dumps({"error": "Forbidden: invalid or missing x-api-key"}),
+                }
+        else:
+            # No API key configured and no payment header → request payment
+            return _payment_required_response()
 
     try:
         body = json.loads(event.get("body") or "{}")

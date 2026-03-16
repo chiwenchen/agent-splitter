@@ -8,10 +8,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Run tests
 python3 -m pytest tests/ -v
 
-# Build and deploy to AWS (API_KEY is optional; leave empty to disable auth)
+# Build and deploy to AWS
 PATH="/opt/homebrew/bin:$PATH" sam build && sam deploy
-# With API key:
-PATH="/opt/homebrew/bin:$PATH" sam build && sam deploy --parameter-overrides ApiKey=<your-key>
+
+# First-time IAM bootstrap (run once, then never again)
+aws cloudformation deploy \
+  --template-file iam/bootstrap.yaml \
+  --stack-name agent-splitter-iam \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --region ap-northeast-1
 
 # Install MCP server dependencies
 pip install -r mcp_server/requirements.txt
@@ -65,7 +70,32 @@ To enable:
 - Endpoint: `https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com/split_settle`
 - OpenAPI: `https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com/openapi.json`
 - Budget: `monthly-10-usd-limit` — stops Lambda at $10/month (cwchen2000@gmail.com)
-- IAM User: `ClaudeCLI` with `SplitSettleDeployPolicy` (Lambda + API Gateway + CloudFormation + S3 only)
+- IAM User: `ClaudeCLI` with minimal `SplitSettleDeployPolicy` (CloudFormation + PassRole + S3 only)
+- IAM Role: `SplitSettleCFNRole` — assumed by CloudFormation service; holds all resource permissions
+
+## IAM Architecture
+
+Two-role pattern so ClaudeCLI permissions never need to change:
+
+```
+ClaudeCLI (IAM user)
+  └── SplitSettleDeployPolicy
+        ├── cloudformation:* on agent-splitter stack
+        ├── iam:PassRole → SplitSettleCFNRole
+        └── s3:* on SAM artifact bucket
+
+SplitSettleCFNRole (assumed by cloudformation.amazonaws.com)
+  └── SplitSettleCFNPolicy
+        ├── lambda:* on agent-splitter-* functions
+        ├── apigateway:* (HTTP API)
+        ├── secretsmanager:* on split-settle/* secrets
+        ├── iam:* on agent-splitter-* roles (Lambda execution roles)
+        └── logs:* on /aws/lambda/agent-splitter-* groups
+```
+
+**When adding new AWS resource types to `template.yaml`**, only update `SplitSettleCFNRole` in `iam/bootstrap.yaml` — ClaudeCLI's policy stays fixed.
+
+Bootstrap stack: `agent-splitter-iam` (deployed once via `iam/bootstrap.yaml`)
 
 ## Claude Desktop Setup (local stdio)
 

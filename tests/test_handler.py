@@ -2,9 +2,19 @@ import json
 import sys
 import os
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../src/split_settle"))
 
+import handler
 from handler import split_settle, lambda_handler
+
+
+@pytest.fixture(autouse=True)
+def reset_api_key_cache():
+    handler._cached_api_key = None
+    yield
+    handler._cached_api_key = None
 
 
 # --- Core logic tests ---
@@ -219,6 +229,7 @@ def test_api_key_missing_header(monkeypatch):
 
 def test_api_key_disabled_when_env_empty(monkeypatch):
     monkeypatch.delenv("API_KEY", raising=False)
+    monkeypatch.delenv("SECRET_ARN", raising=False)
     event = {
         "rawPath": "/split_settle",
         "body": json.dumps({

@@ -2,13 +2,6 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: SplitSettle - AI Agent expense splitting MCP tool
 
-Parameters:
-  ApiKey:
-    Type: String
-    Default: ""
-    NoEcho: true
-    Description: "API Key for x-api-key header auth. Leave empty to disable auth."
-
 Globals:
   Function:
     Timeout: 10
@@ -16,6 +9,12 @@ Globals:
     Runtime: python3.13
 
 Resources:
+  ApiKeySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: split-settle/api-key
+      Description: API Key for SplitSettle service (x-api-key header)
+
   SplitSettleFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -23,7 +22,13 @@ Resources:
       Handler: handler.lambda_handler
       Environment:
         Variables:
-          API_KEY: !Ref ApiKey
+          SECRET_ARN: !Ref ApiKeySecret
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Ref ApiKeySecret
       Events:
         SplitSettle:
           Type: HttpApi
@@ -43,3 +48,6 @@ Outputs:
   OpenApiUrl:
     Description: OpenAPI schema URL
     Value: !Sub "https://${ServerlessHttpApi}.execute-api.${AWS::Region}.amazonaws.com/openapi.json"
+  SecretArn:
+    Description: Secrets Manager ARN (retrieve key value from AWS Console or CLI)
+    Value: !Ref ApiKeySecret

@@ -1,0 +1,209 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  One-time IAM bootstrap for agent-splitter.
+  Creates a CloudFormation Execution Role that SAM deploys use,
+  and scopes down the ClaudeCLI user policy to a minimal set.
+  Deploy this stack once; all future sam deploys go through the CFN role.
+
+Parameters:
+  ClaudeCLIUserName:
+    Type: String
+    Default: ClaudeCLI
+    Description: IAM user name that runs sam build / sam deploy
+
+Resources:
+
+  # ── CloudFormation Execution Role ──────────────────────────────────────────
+  # Assumed by the CloudFormation service when deploying the agent-splitter stack.
+  # Add permissions here whenever template.yaml gains new resource types.
+
+  SplitSettleCFNRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SplitSettleCFNRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SplitSettleCFNPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+
+              # Lambda
+              - Sid: Lambda
+                Effect: Allow
+                Action:
+                  - lambda:CreateFunction
+                  - lambda:UpdateFunctionCode
+                  - lambda:UpdateFunctionConfiguration
+                  - lambda:DeleteFunction
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:ListFunctions
+                  - lambda:AddPermission
+                  - lambda:RemovePermission
+                  - lambda:GetPolicy
+                  - lambda:TagResource
+                  - lambda:UntagResource
+                Resource:
+                  - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:agent-splitter-*"
+
+              # API Gateway (HTTP API)
+              - Sid: ApiGateway
+                Effect: Allow
+                Action:
+                  - apigateway:GET
+                  - apigateway:POST
+                  - apigateway:PUT
+                  - apigateway:PATCH
+                  - apigateway:DELETE
+                  - apigateway:TagResource
+                  - apigateway:UntagResource
+                Resource: "*"
+
+              # Secrets Manager
+              - Sid: SecretsManager
+                Effect: Allow
+                Action:
+                  - secretsmanager:CreateSecret
+                  - secretsmanager:UpdateSecret
+                  - secretsmanager:DeleteSecret
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:PutSecretValue
+                  - secretsmanager:TagResource
+                  - secretsmanager:UntagResource
+                Resource:
+                  - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:split-settle/*"
+
+              # IAM — only for Lambda execution roles created by SAM
+              - Sid: IAMForLambdaRoles
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:PassRole
+                  - iam:TagRole
+                  - iam:UntagRole
+                Resource:
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/agent-splitter-*"
+
+              # CloudWatch Logs (created implicitly by Lambda)
+              - Sid: CloudWatchLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:DeleteLogGroup
+                  - logs:DescribeLogGroups
+                  - logs:PutRetentionPolicy
+                  - logs:DeleteRetentionPolicy
+                  - logs:TagLogGroup
+                  - logs:UntagLogGroup
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/agent-splitter-*"
+
+              # SAM transform metadata (read-only)
+              - Sid: CloudFormationReadOnly
+                Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackResource
+                  - cloudformation:DescribeStackResources
+                Resource: "*"
+
+  # ── ClaudeCLI Deploy Policy ─────────────────────────────────────────────────
+  # Attached to the ClaudeCLI IAM user.
+  # This policy NEVER changes — only the CFN role above needs updates.
+
+  SplitSettleDeployPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: SplitSettleDeployPolicy
+      Description: >
+        Minimal permissions for ClaudeCLI to deploy the agent-splitter SAM stack.
+        All resource-level permissions live in SplitSettleCFNRole.
+      Users:
+        - !Ref ClaudeCLIUserName
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+
+          # CloudFormation — limited to the agent-splitter stack
+          - Sid: CloudFormation
+            Effect: Allow
+            Action:
+              - cloudformation:CreateStack
+              - cloudformation:UpdateStack
+              - cloudformation:DeleteStack
+              - cloudformation:DescribeStacks
+              - cloudformation:DescribeStackEvents
+              - cloudformation:DescribeStackResource
+              - cloudformation:DescribeStackResources
+              - cloudformation:DescribeChangeSet
+              - cloudformation:CreateChangeSet
+              - cloudformation:DeleteChangeSet
+              - cloudformation:ExecuteChangeSet
+              - cloudformation:GetTemplate
+              - cloudformation:GetTemplateSummary
+              - cloudformation:ValidateTemplate
+              - cloudformation:ListStackResources
+            Resource:
+              - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/agent-splitter/*"
+              - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/agent-splitter"
+              - !Sub "arn:aws:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31"
+
+          # ValidateTemplate requires * resource
+          - Sid: CloudFormationValidate
+            Effect: Allow
+            Action:
+              - cloudformation:ValidateTemplate
+              - cloudformation:GetTemplateSummary
+              - cloudformation:DescribeStacks
+            Resource: "*"
+
+          # Pass the CFN execution role to CloudFormation
+          - Sid: PassCFNRole
+            Effect: Allow
+            Action: iam:PassRole
+            Resource: !GetAtt SplitSettleCFNRole.Arn
+
+          # SAM build artifact bucket (auto-created by SAM)
+          - Sid: S3SamBucket
+            Effect: Allow
+            Action:
+              - s3:CreateBucket
+              - s3:GetBucketLocation
+              - s3:PutBucketVersioning
+              - s3:GetBucketVersioning
+              - s3:PutBucketPolicy
+              - s3:GetBucketPolicy
+              - s3:PutObject
+              - s3:GetObject
+              - s3:DeleteObject
+              - s3:ListBucket
+              - s3:GetEncryptionConfiguration
+              - s3:PutEncryptionConfiguration
+              - s3:GetLifecycleConfiguration
+              - s3:PutLifecycleConfiguration
+            Resource:
+              - !Sub "arn:aws:s3:::aws-sam-cli-managed-default-samclisourcebucket-*"
+              - !Sub "arn:aws:s3:::aws-sam-cli-managed-default-samclisourcebucket-*/*"
+
+Outputs:
+  CFNRoleArn:
+    Description: ARN of the CloudFormation execution role — add to samconfig.toml
+    Value: !GetAtt SplitSettleCFNRole.Arn
+  DeployPolicyArn:
+    Description: ARN of the ClaudeCLI deploy policy
+    Value: !Ref SplitSettleDeployPolicy

@@ -51,13 +51,21 @@ Lambda: src/split_settle/handler.py   # Pure Python, no dependencies
 
 ## API Key Setup
 
-API key auth is **disabled by default** (when `API_KEY` env var is empty on Lambda).
+API key is managed by **AWS Secrets Manager** (`split-settle/api-key`).
+- Auto-generated on first deploy (32-char random string)
+- Lambda reads it at runtime via boto3 (cached in global scope)
+- Not visible in Lambda config or CloudFormation outputs
 
-To enable:
-1. Generate a key: `python3 -c "import secrets; print(secrets.token_hex(16))"`
-2. Deploy: `sam deploy --parameter-overrides ApiKey=<generated-key>`
-3. Pass in requests: `x-api-key: <key>` header
-4. For MCP server: set `SPLIT_SETTLE_API_KEY=<key>` env var
+Retrieve the key value after deploy:
+```bash
+aws secretsmanager get-secret-value \
+  --secret-id split-settle/api-key \
+  --query SecretString --output text \
+  --region ap-northeast-1
+```
+
+For MCP server: set `SPLIT_SETTLE_API_KEY=<value>` env var.
+For local dev/tests: set `API_KEY=<any-value>` env var (bypasses Secrets Manager).
 
 ## AWS Resources
 

@@ -1,6 +1,33 @@
 import json
 import os
 
+import boto3
+
+_cached_api_key = None
+
+
+def _get_api_key() -> str:
+    """Read API key from Secrets Manager (cached) or API_KEY env var (local dev/tests)."""
+    global _cached_api_key
+
+    # Local dev / tests: use API_KEY env var directly
+    env_key = os.environ.get("API_KEY", "")
+    if env_key:
+        return env_key
+
+    # Production: read from Secrets Manager and cache
+    secret_arn = os.environ.get("SECRET_ARN", "")
+    if not secret_arn:
+        return ""  # no auth configured
+
+    if _cached_api_key is None:
+        client = boto3.client("secretsmanager")
+        response = client.get_secret_value(SecretId=secret_arn)
+        _cached_api_key = response["SecretString"]
+
+    return _cached_api_key
+
+
 OPENAPI_SCHEMA = {
     "openapi": "3.1.0",
     "info": {
@@ -145,8 +172,8 @@ def lambda_handler(event, context):
             "body": json.dumps(OPENAPI_SCHEMA),
         }
 
-    # API Key validation (only when API_KEY env var is set)
-    api_key = os.environ.get("API_KEY", "")
+    # API Key validation
+    api_key = _get_api_key()
     if api_key:
         provided = (event.get("headers") or {}).get("x-api-key", "")
         if provided != api_key:

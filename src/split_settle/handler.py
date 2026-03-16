@@ -1,5 +1,8 @@
 import json
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 _cached_api_key = None
 
@@ -194,6 +197,7 @@ def lambda_handler(event, context):
             "body": json.dumps({"error": str(e)}),
         }
     except Exception:
+        logger.exception("Unhandled error in lambda_handler")
         return {
             "statusCode": 500,
             "headers": {"Content-Type": "application/json"},

@@ -115,6 +115,15 @@ def test_too_few_participants():
         pass
 
 
+def test_too_many_participants():
+    participants = [str(i) for i in range(21)]
+    try:
+        split_settle({"currency": "TWD", "participants": participants, "expenses": [{"paid_by": "0", "amount": 100, "split_among": ["0", "1"]}]})
+        assert False
+    except ValueError as e:
+        assert "20" in str(e)
+
+
 def test_paid_by_not_in_participants():
     try:
         split_settle({

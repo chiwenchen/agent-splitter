@@ -112,6 +112,7 @@ OPENAPI_SCHEMA = {
                         "type": "array",
                         "items": {"type": "string"},
                         "minItems": 2,
+                        "maxItems": 20,
                     },
                     "expenses": {
                         "type": "array",
@@ -210,6 +211,8 @@ def split_settle(data: dict) -> dict:
         raise ValueError("currency is required")
     if len(participants) < 2:
         raise ValueError("at least 2 participants required")
+    if len(participants) > 20:
+        raise ValueError("participants cannot exceed 20")
     if len(expenses) < 1:
         raise ValueError("at least 1 expense required")
 

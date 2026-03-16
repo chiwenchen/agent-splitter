@@ -1,6 +1,29 @@
 import json
 import os
 
+_cached_api_key = None
+
+
+def _get_api_key() -> str:
+    global _cached_api_key
+    if _cached_api_key is not None:
+        return _cached_api_key
+    # Local dev: set API_KEY env var directly to bypass Secrets Manager
+    direct_key = os.environ.get("API_KEY", "")
+    if direct_key:
+        _cached_api_key = direct_key
+        return _cached_api_key
+    secret_arn = os.environ.get("SECRET_ARN", "")
+    if secret_arn:
+        import boto3  # available in Lambda runtime; lazy to avoid test dependency
+        client = boto3.client("secretsmanager", region_name="ap-northeast-1")
+        response = client.get_secret_value(SecretId=secret_arn)
+        _cached_api_key = response.get("SecretString", "")
+    else:
+        _cached_api_key = ""
+    return _cached_api_key
+
+
 OPENAPI_SCHEMA = {
     "openapi": "3.1.0",
     "info": {
@@ -145,8 +168,8 @@ def lambda_handler(event, context):
             "body": json.dumps(OPENAPI_SCHEMA),
         }
 
-    # API Key validation (only when API_KEY env var is set)
-    api_key = os.environ.get("API_KEY", "")
+    # API Key validation (only when API_KEY or SECRET_ARN env var is set)
+    api_key = _get_api_key()
     if api_key:
         provided = (event.get("headers") or {}).get("x-api-key", "")
         if provided != api_key:

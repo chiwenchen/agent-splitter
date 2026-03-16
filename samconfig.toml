@@ -4,6 +4,5 @@ version = 0.1
 stack_name = "agent-splitter"
 region = "ap-northeast-1"
 confirm_changeset = false
-capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+capabilities = "CAPABILITY_IAM"
 resolve_s3 = true
-role_arn = "arn:aws:iam::274571492950:role/SplitSettleCFNRole"

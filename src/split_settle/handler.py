@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import time
 import urllib.request
 
@@ -109,8 +110,6 @@ def _mark_tx_used(tx_hash: str) -> None:
     except client.exceptions.ConditionalCheckFailedException:
         raise ValueError("tx already used (race condition)")
 
-
-import re
 
 _GROUP_ID_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,62}[a-z0-9]$")
 

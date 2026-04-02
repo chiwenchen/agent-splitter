@@ -18,7 +18,7 @@ Resources:
   ApiKeySecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: split-settle/api-key
+      Name: split-settle/api-key-v2
       Description: API Key for SplitSettle service (x-api-key header)
 
   AlchemySecret:

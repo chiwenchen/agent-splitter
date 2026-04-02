@@ -543,25 +543,18 @@ def groups_env(monkeypatch):
                             if k.startswith(f"GROUP#{gid}|PARTICIPANT#")
                         })
 
-    import importlib
-    original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
-
-    def mock_boto3_for_groups(*args, **kwargs):
-        return FakeGroupsDynamoDB()
-
-    monkeypatch.setattr(handler, "_create_group", handler._create_group)  # keep original
-    # Patch boto3 import inside _create_group
+    # Create a fake boto3 module that works even if boto3 isn't installed
+    import types
     import unittest.mock
+
     mock_client = unittest.mock.MagicMock()
     mock_client.query = lambda **kwargs: _fake_groups_query(**kwargs)
     mock_client.put_item = lambda **kwargs: _fake_groups_put(**kwargs)
 
-    def fake_boto3_client(service, **kwargs):
-        if service == "dynamodb":
-            return mock_client
-        raise ValueError(f"unexpected service: {service}")
+    fake_boto3 = types.ModuleType("boto3")
+    fake_boto3.client = lambda service, **kwargs: mock_client
 
-    monkeypatch.setattr("boto3.client", fake_boto3_client)
+    monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
     yield
 
 

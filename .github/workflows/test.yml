@@ -14,5 +14,5 @@ jobs:
           python-version: "3.13"
       - name: Run tests
         run: |
-          pip install pytest -q
+          pip install pytest pycryptodome -q
           python -m pytest tests/ -v

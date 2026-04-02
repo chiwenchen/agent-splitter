@@ -43,6 +43,23 @@ Resources:
         AttributeName: ttl_expiry
         Enabled: true
 
+  GroupsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-groups"
+      BillingMode: PAY_PER_REQUEST
+      TableClass: STANDARD_INFREQUENT_ACCESS
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+
   SplitSettleFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -54,6 +71,7 @@ Resources:
           SECRET_ARN: !Ref ApiKeySecret
           ALCHEMY_SECRET_ARN: !Ref AlchemySecret
           PAYMENTS_TABLE: !Ref UsedPaymentsTable
+          GROUPS_TABLE: !Ref GroupsTable
       Policies:
         - AWSLambdaBasicExecutionRole
         - Statement:
@@ -68,6 +86,12 @@ Resources:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
               Resource: !GetAtt UsedPaymentsTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:Query
+              Resource: !GetAtt GroupsTable.Arn
       Events:
         SplitSettle:
           Type: HttpApi
@@ -87,6 +111,12 @@ Resources:
             Path: /health
             Method: get
             ApiId: !Ref SplitSettleApi
+        Groups:
+          Type: HttpApi
+          Properties:
+            Path: /v1/groups
+            Method: post
+            ApiId: !Ref SplitSettleApi
 
 Outputs:
   ApiUrl:
@@ -104,3 +134,6 @@ Outputs:
   UsedPaymentsTableName:
     Description: DynamoDB table for replay attack prevention
     Value: !Ref UsedPaymentsTable
+  GroupsTableName:
+    Description: DynamoDB table for wallet group registry
+    Value: !Ref GroupsTable

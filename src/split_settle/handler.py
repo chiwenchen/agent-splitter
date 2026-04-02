@@ -14,51 +14,69 @@ PAYMENT_AMOUNT_DISPLAY = "0.001"
 PAYMENT_AMOUNT_MIN     = 1000  # 0.001 USDC at 6 decimals
 TRANSFER_EVENT_SIG     = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 
-_cached_api_key    = None
-_cached_alchemy_url = None
+# Base Sepolia USDC contract for Phase A demo
+SETTLEMENT_NETWORK        = "base-sepolia"
+SETTLEMENT_TOKEN_CONTRACT = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+# ERC-20 transfer(address,uint256) selector
+TRANSFER_SELECTOR = "a9059cbb"
+
+_secret_cache: dict = {}
+_HEX_CHARS = set("0123456789abcdefABCDEF")
 
 
-def _get_api_key() -> str:
-    global _cached_api_key
-    if _cached_api_key is not None:
-        return _cached_api_key
-    direct_key = os.environ.get("API_KEY", "")
-    if direct_key:
-        _cached_api_key = direct_key
-        return _cached_api_key
-    secret_arn = os.environ.get("SECRET_ARN", "")
-    if secret_arn:
+def _get_secret(env_var: str, arn_var: str) -> str:
+    """Get a secret from env var or Secrets Manager. Cached globally."""
+    if env_var in _secret_cache:
+        return _secret_cache[env_var]
+    direct = os.environ.get(env_var, "")
+    if direct:
+        _secret_cache[env_var] = direct
+        return direct
+    arn = os.environ.get(arn_var, "")
+    if arn:
         import boto3
         client = boto3.client("secretsmanager", region_name="ap-northeast-1")
-        response = client.get_secret_value(SecretId=secret_arn)
-        _cached_api_key = response.get("SecretString", "")
+        response = client.get_secret_value(SecretId=arn)
+        _secret_cache[env_var] = response.get("SecretString", "")
     else:
-        _cached_api_key = ""
-    return _cached_api_key
+        _secret_cache[env_var] = ""
+    return _secret_cache[env_var]
 
 
-def _get_alchemy_url() -> str:
-    global _cached_alchemy_url
-    if _cached_alchemy_url is not None:
-        return _cached_alchemy_url
-    direct_url = os.environ.get("ALCHEMY_RPC_URL", "")
-    if direct_url:
-        _cached_alchemy_url = direct_url
-        return _cached_alchemy_url
-    secret_arn = os.environ.get("ALCHEMY_SECRET_ARN", "")
-    if secret_arn:
-        import boto3
-        client = boto3.client("secretsmanager", region_name="ap-northeast-1")
-        response = client.get_secret_value(SecretId=secret_arn)
-        _cached_alchemy_url = response.get("SecretString", "")
-    else:
-        _cached_alchemy_url = ""
-    return _cached_alchemy_url
+def _validate_checksum_address(address: str) -> bool:
+    """Validate EIP-55 mixed-case checksum encoding."""
+    if not isinstance(address, str) or len(address) != 42 or address[:2] != "0x":
+        return False
+    addr_hex = address[2:]
+    if not all(c in _HEX_CHARS for c in addr_hex):
+        return False
+    # Lazy import to avoid cold start penalty on non-groups calls
+    from Crypto.Hash import keccak
+    k = keccak.new(digest_bits=256)
+    k.update(addr_hex.lower().encode("ascii"))
+    hash_hex = k.hexdigest()
+    for i, c in enumerate(addr_hex):
+        if c in "0123456789":
+            continue
+        if int(hash_hex[i], 16) >= 8:
+            if c != c.upper():
+                return False
+        else:
+            if c != c.lower():
+                return False
+    return True
+
+
+def _encode_transfer_calldata(to_address: str, amount_wei: int) -> str:
+    """Encode ERC-20 transfer(address,uint256) calldata."""
+    addr_padded = to_address[2:].lower().zfill(64)
+    amount_padded = hex(amount_wei)[2:].zfill(64)
+    return "0x" + TRANSFER_SELECTOR + addr_padded + amount_padded
 
 
 def _rpc_call(method: str, params: list) -> dict:
     """Make a JSON-RPC call to Alchemy."""
-    url = _get_alchemy_url()
+    url = _get_secret("ALCHEMY_RPC_URL", "ALCHEMY_SECRET_ARN")
     payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
     req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(req, timeout=8) as resp:
@@ -90,6 +108,91 @@ def _mark_tx_used(tx_hash: str) -> None:
         )
     except client.exceptions.ConditionalCheckFailedException:
         raise ValueError("tx already used (race condition)")
+
+
+import re
+
+_GROUP_ID_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,62}[a-z0-9]$")
+
+
+def _create_group(group_id: str, participants: list) -> dict:
+    """Create a wallet group in DynamoDB. Returns summary dict."""
+    import boto3
+    table = os.environ.get("GROUPS_TABLE", "")
+    if not table:
+        raise ValueError("GROUPS_TABLE not configured")
+
+    if not group_id or not _GROUP_ID_RE.match(group_id):
+        raise ValueError("group_id must be 2-64 lowercase alphanumeric + hyphens")
+
+    if not participants or len(participants) < 2:
+        raise ValueError("at least 2 participants required")
+    if len(participants) > 20:
+        raise ValueError("participants cannot exceed 20")
+
+    for p in participants:
+        name = p.get("name", "")
+        wallet = p.get("wallet_address", "")
+        if not name:
+            raise ValueError("each participant must have a name")
+        if not _validate_checksum_address(wallet):
+            raise ValueError(f"invalid wallet address for {name}")
+
+    client = boto3.client("dynamodb", region_name="ap-northeast-1")
+    created_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    # Check for duplicate group_id by trying to read the first participant
+    existing = client.query(
+        TableName=table,
+        KeyConditionExpression="PK = :pk",
+        ExpressionAttributeValues={":pk": {"S": f"GROUP#{group_id}"}},
+        Limit=1,
+    )
+    if existing.get("Items"):
+        raise GroupExistsError(f"group '{group_id}' already exists")
+
+    for p in participants:
+        client.put_item(
+            TableName=table,
+            Item={
+                "PK": {"S": f"GROUP#{group_id}"},
+                "SK": {"S": f"PARTICIPANT#{p['name']}"},
+                "wallet_address": {"S": p["wallet_address"]},
+                "created_at": {"S": created_at},
+            },
+        )
+
+    return {"group_id": group_id, "participants": len(participants), "created_at": created_at}
+
+
+class GroupExistsError(Exception):
+    pass
+
+
+def _get_group_participants(group_id: str) -> dict:
+    """Query DynamoDB for group participants. Returns {name: wallet_address} dict."""
+    import boto3
+    table = os.environ.get("GROUPS_TABLE", "")
+    if not table:
+        raise ValueError("GROUPS_TABLE not configured")
+
+    client = boto3.client("dynamodb", region_name="ap-northeast-1")
+    response = client.query(
+        TableName=table,
+        KeyConditionExpression="PK = :pk",
+        ExpressionAttributeValues={":pk": {"S": f"GROUP#{group_id}"}},
+    )
+
+    items = response.get("Items", [])
+    if not items:
+        return {}
+
+    result = {}
+    for item in items:
+        sk = item["SK"]["S"]
+        name = sk.replace("PARTICIPANT#", "", 1)
+        result[name] = item["wallet_address"]["S"]
+    return result
 
 
 def _verify_payment(tx_hash: str, network: str) -> tuple:
@@ -307,8 +410,27 @@ OPENAPI_SCHEMA = {
 }
 
 
+_METHOD_NOT_ALLOWED = {
+    "statusCode": 405,
+    "headers": {"Content-Type": "application/json"},
+    "body": json.dumps({"error": "Method Not Allowed"}),
+}
+
+_ROUTE_METHODS = {
+    "/openapi.json": "GET",
+    "/health": "GET",
+    "/v1/split_settle": "POST",
+    "/v1/groups": "POST",
+}
+
+
 def lambda_handler(event, context):
     path = event.get("rawPath", "")
+    method = event.get("requestContext", {}).get("http", {}).get("method", "")
+
+    expected_method = _ROUTE_METHODS.get(path)
+    if expected_method and method and method != expected_method:
+        return _METHOD_NOT_ALLOWED
 
     if path == "/openapi.json":
         return {
@@ -324,6 +446,58 @@ def lambda_handler(event, context):
             "body": json.dumps({"status": "ok"}),
         }
 
+    if path == "/v1/groups":
+        return _handle_groups(event)
+
+    return _handle_split_settle(event)
+
+
+def _handle_groups(event):
+    """Handle POST /v1/groups — create a wallet group."""
+    headers = event.get("headers") or {}
+
+    # Auth: require API key for group creation
+    api_key = _get_secret("API_KEY", "SECRET_ARN")
+    if api_key:
+        provided = headers.get("x-api-key", "")
+        if provided != api_key:
+            return {
+                "statusCode": 403,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"error": "Forbidden: invalid or missing x-api-key"}),
+            }
+
+    try:
+        body = json.loads(event.get("body") or "{}")
+        result = _create_group(body.get("group_id", ""), body.get("participants", []))
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps(result),
+        }
+    except GroupExistsError as e:
+        return {
+            "statusCode": 409,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": str(e), "code": "GROUP_EXISTS"}),
+        }
+    except ValueError as e:
+        return {
+            "statusCode": 400,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": str(e)}),
+        }
+    except Exception:
+        logger.exception("Unhandled error in _handle_groups")
+        return {
+            "statusCode": 500,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "Internal server error"}),
+        }
+
+
+def _handle_split_settle(event):
+    """Handle POST /v1/split_settle — calculate settlements."""
     headers = event.get("headers") or {}
     x_payment = headers.get("x-payment") or headers.get("X-Payment") or headers.get("X-PAYMENT") or ""
 
@@ -342,7 +516,7 @@ def lambda_handler(event, context):
             return _payment_required_response(error)
     else:
         # Legacy API key flow
-        api_key = _get_api_key()
+        api_key = _get_secret("API_KEY", "SECRET_ARN")
         if api_key:
             provided = headers.get("x-api-key", "")
             if provided != api_key:
@@ -370,7 +544,7 @@ def lambda_handler(event, context):
             "body": json.dumps({"error": str(e)}),
         }
     except Exception:
-        logger.exception("Unhandled error in lambda_handler")
+        logger.exception("Unhandled error in _handle_split_settle")
         return {
             "statusCode": 500,
             "headers": {"Content-Type": "application/json"},
@@ -382,6 +556,7 @@ def split_settle(data: dict) -> dict:
     currency = data.get("currency")
     participants = data.get("participants", [])
     expenses = data.get("expenses", [])
+    group_id = data.get("group_id")
 
     if not currency:
         raise ValueError("currency is required")
@@ -439,7 +614,7 @@ def split_settle(data: dict) -> dict:
 
     settlements = _calculate_settlements(balances)
 
-    return {
+    result = {
         "currency": currency,
         "summary": summary,
         "settlements": [
@@ -449,6 +624,46 @@ def split_settle(data: dict) -> dict:
         "total_expenses": total_cents / 100,
         "num_settlements": len(settlements),
     }
+
+    # When group_id is provided, add execution block with ABI-encoded calldata
+    if group_id:
+        wallet_map = _get_group_participants(group_id)
+        if not wallet_map:
+            raise ValueError(f"group '{group_id}' not found")
+
+        # Validate all settlement participants exist in the group
+        for s in settlements:
+            for role in ("from", "to"):
+                name = s[role]
+                if name not in wallet_map:
+                    raise ValueError(
+                        f"participant '{name}' in expenses not found in group"
+                    )
+
+        transfers = []
+        for s in settlements:
+            from_wallet = wallet_map[s["from"]]
+            to_wallet = wallet_map[s["to"]]
+            # Convert settlement amount to USDC wei (6 decimals)
+            amount_wei = round(s["amount"] / 100 * 1_000_000)
+            transfers.append({
+                "from_wallet": from_wallet,
+                "to_wallet": to_wallet,
+                "amount_wei": str(amount_wei),
+                "calldata": _encode_transfer_calldata(to_wallet, amount_wei),
+            })
+
+        result["execution"] = {
+            "network": SETTLEMENT_NETWORK,
+            "token_contract": SETTLEMENT_TOKEN_CONTRACT,
+            "transfers": transfers,
+            "note": (
+                "Calldata encodes ERC-20 transfer(address,uint256). "
+                "Caller must sign and submit each transfer from the from_wallet."
+            ),
+        }
+
+    return result
 
 
 def _calculate_settlements(balances: dict) -> list:

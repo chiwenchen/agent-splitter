@@ -13,11 +13,9 @@ from handler import split_settle, lambda_handler
 
 @pytest.fixture(autouse=True)
 def reset_caches(monkeypatch):
-    handler._cached_api_key = None
-    handler._cached_alchemy_url = None
+    handler._secret_cache.clear()
     yield
-    handler._cached_api_key = None
-    handler._cached_alchemy_url = None
+    handler._secret_cache.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -402,3 +400,326 @@ def test_health_endpoint():
     response = lambda_handler(event, {})
     assert response["statusCode"] == 200
     assert json.loads(response["body"])["status"] == "ok"
+
+
+# ---------------------------------------------------------------------------
+# HTTP method checking tests
+# ---------------------------------------------------------------------------
+
+def test_method_not_allowed_get_split_settle(monkeypatch):
+    monkeypatch.setenv("API_KEY", "testkey")
+    event = {
+        "rawPath": "/v1/split_settle",
+        "requestContext": {"http": {"method": "GET"}},
+        "headers": {"x-api-key": "testkey"},
+        "body": VALID_BODY,
+    }
+    assert lambda_handler(event, {})["statusCode"] == 405
+
+
+def test_method_not_allowed_post_health():
+    event = {
+        "rawPath": "/health",
+        "requestContext": {"http": {"method": "POST"}},
+    }
+    assert lambda_handler(event, {})["statusCode"] == 405
+
+
+# ---------------------------------------------------------------------------
+# _get_secret tests
+# ---------------------------------------------------------------------------
+
+def test_get_secret_from_env(monkeypatch):
+    monkeypatch.setenv("MY_SECRET", "direct-value")
+    result = handler._get_secret("MY_SECRET", "MY_SECRET_ARN")
+    assert result == "direct-value"
+
+
+# ---------------------------------------------------------------------------
+# EIP-55 validation tests
+# ---------------------------------------------------------------------------
+
+def test_eip55_valid_address():
+    # Known valid EIP-55 checksummed address (Ethereum foundation)
+    assert handler._validate_checksum_address("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed") is True
+
+
+def test_eip55_invalid_checksum():
+    # Same address but wrong case on one character
+    assert handler._validate_checksum_address("0x5aaeb6053F3E94C9b9A09f33669435E7Ef1BeAed") is False
+
+
+def test_eip55_invalid_format_short():
+    assert handler._validate_checksum_address("0x1234") is False
+
+
+def test_eip55_invalid_format_non_hex():
+    assert handler._validate_checksum_address("0xGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG") is False
+
+
+def test_eip55_not_string():
+    assert handler._validate_checksum_address(12345) is False
+
+
+# ---------------------------------------------------------------------------
+# ABI encoding tests
+# ---------------------------------------------------------------------------
+
+def test_encode_transfer_calldata_known_vector():
+    # transfer(0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed, 1000000)
+    result = handler._encode_transfer_calldata(
+        "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", 1000000
+    )
+    assert result.startswith("0xa9059cbb")
+    assert len(result) == 2 + 8 + 64 + 64  # 0x + selector + addr + amount
+    # Verify amount encoding (1000000 = 0xf4240)
+    assert result.endswith("f4240".zfill(64))
+
+
+def test_encode_transfer_calldata_min_amount():
+    result = handler._encode_transfer_calldata(
+        "0x0000000000000000000000000000000000000001", 1
+    )
+    assert result.endswith("1".zfill(64))
+
+
+def test_encode_transfer_calldata_max_uint256():
+    max_val = 2**256 - 1
+    result = handler._encode_transfer_calldata(
+        "0x0000000000000000000000000000000000000001", max_val
+    )
+    assert "f" * 64 in result
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/groups tests
+# ---------------------------------------------------------------------------
+
+# Known valid EIP-55 addresses for testing
+_ALICE_WALLET = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"
+_BOB_WALLET = "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359"
+
+# Fake DynamoDB for groups
+_fake_groups_db = {}
+
+
+def _fake_groups_query(TableName, KeyConditionExpression, ExpressionAttributeValues, **kwargs):
+    pk = ExpressionAttributeValues[":pk"]["S"]
+    items = [v for k, v in _fake_groups_db.items() if k.startswith(pk + "|")]
+    limit = kwargs.get("Limit")
+    if limit:
+        items = items[:limit]
+    return {"Items": items}
+
+
+def _fake_groups_put(TableName, Item, **kwargs):
+    pk = Item["PK"]["S"]
+    sk = Item["SK"]["S"]
+    _fake_groups_db[f"{pk}|{sk}"] = Item
+
+
+class FakeGroupsDynamoDB:
+    def query(self, **kwargs):
+        return _fake_groups_query(**kwargs)
+
+    def put_item(self, **kwargs):
+        return _fake_groups_put(**kwargs)
+
+    class exceptions:
+        class ConditionalCheckFailedException(Exception):
+            pass
+
+
+@pytest.fixture
+def groups_env(monkeypatch):
+    """Set up groups environment with fake DynamoDB."""
+    monkeypatch.setenv("API_KEY", "testkey")
+    monkeypatch.setenv("GROUPS_TABLE", "test-groups")
+    _fake_groups_db.clear()
+    monkeypatch.setattr(handler, "_get_group_participants",
+                        lambda gid: {
+                            k.split("PARTICIPANT#")[1]: v["wallet_address"]["S"]
+                            for k, v in _fake_groups_db.items()
+                            if k.startswith(f"GROUP#{gid}|PARTICIPANT#")
+                        })
+
+    # Create a fake boto3 module that works even if boto3 isn't installed
+    import types
+    import unittest.mock
+
+    mock_client = unittest.mock.MagicMock()
+    mock_client.query = lambda **kwargs: _fake_groups_query(**kwargs)
+    mock_client.put_item = lambda **kwargs: _fake_groups_put(**kwargs)
+
+    fake_boto3 = types.ModuleType("boto3")
+    fake_boto3.client = lambda service, **kwargs: mock_client
+
+    monkeypatch.setitem(sys.modules, "boto3", fake_boto3)
+    yield
+
+
+def _groups_event(body):
+    return {
+        "rawPath": "/v1/groups",
+        "requestContext": {"http": {"method": "POST"}},
+        "headers": {"x-api-key": "testkey"},
+        "body": json.dumps(body),
+    }
+
+
+def test_create_group_success(groups_env):
+    body = {
+        "group_id": "trip-tokyo-2026",
+        "participants": [
+            {"name": "Alice", "wallet_address": _ALICE_WALLET},
+            {"name": "Bob", "wallet_address": _BOB_WALLET},
+        ],
+    }
+    response = lambda_handler(_groups_event(body), {})
+    assert response["statusCode"] == 200
+    result = json.loads(response["body"])
+    assert result["group_id"] == "trip-tokyo-2026"
+    assert result["participants"] == 2
+
+
+def test_create_group_duplicate_409(groups_env):
+    body = {
+        "group_id": "trip-tokyo-2026",
+        "participants": [
+            {"name": "Alice", "wallet_address": _ALICE_WALLET},
+            {"name": "Bob", "wallet_address": _BOB_WALLET},
+        ],
+    }
+    lambda_handler(_groups_event(body), {})
+    response = lambda_handler(_groups_event(body), {})
+    assert response["statusCode"] == 409
+    assert "GROUP_EXISTS" in json.loads(response["body"]).get("code", "")
+
+
+def test_create_group_invalid_wallet(groups_env):
+    body = {
+        "group_id": "test-group",
+        "participants": [
+            {"name": "Alice", "wallet_address": "not-an-address"},
+            {"name": "Bob", "wallet_address": _BOB_WALLET},
+        ],
+    }
+    response = lambda_handler(_groups_event(body), {})
+    assert response["statusCode"] == 400
+    assert "invalid wallet" in json.loads(response["body"])["error"].lower()
+
+
+def test_create_group_bad_checksum(groups_env):
+    # Valid hex but wrong EIP-55 checksum
+    body = {
+        "group_id": "test-group",
+        "participants": [
+            {"name": "Alice", "wallet_address": "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed"},
+            {"name": "Bob", "wallet_address": _BOB_WALLET},
+        ],
+    }
+    response = lambda_handler(_groups_event(body), {})
+    assert response["statusCode"] == 400
+
+
+def test_create_group_missing_fields(groups_env):
+    response = lambda_handler(_groups_event({}), {})
+    assert response["statusCode"] == 400
+
+
+def test_create_group_invalid_group_id(groups_env):
+    body = {
+        "group_id": "INVALID_ID!@#",
+        "participants": [
+            {"name": "Alice", "wallet_address": _ALICE_WALLET},
+            {"name": "Bob", "wallet_address": _BOB_WALLET},
+        ],
+    }
+    response = lambda_handler(_groups_event(body), {})
+    assert response["statusCode"] == 400
+
+
+# ---------------------------------------------------------------------------
+# split_settle with group_id tests
+# ---------------------------------------------------------------------------
+
+def test_split_settle_with_group_id(groups_env, monkeypatch):
+    monkeypatch.delenv("SECRET_ARN", raising=False)
+    # Create group first
+    body = {
+        "group_id": "test-settle",
+        "participants": [
+            {"name": "Alice", "wallet_address": _ALICE_WALLET},
+            {"name": "Bob", "wallet_address": _BOB_WALLET},
+        ],
+    }
+    lambda_handler(_groups_event(body), {})
+
+    # Now split_settle with group_id
+    settle_body = {
+        "currency": "USD",
+        "group_id": "test-settle",
+        "participants": ["Alice", "Bob"],
+        "expenses": [{"paid_by": "Alice", "amount": 100, "split_among": ["Alice", "Bob"]}],
+    }
+    event = {
+        "rawPath": "/v1/split_settle",
+        "requestContext": {"http": {"method": "POST"}},
+        "headers": {"x-api-key": "testkey"},
+        "body": json.dumps(settle_body),
+    }
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 200
+    result = json.loads(response["body"])
+    assert "execution" in result
+    assert result["execution"]["network"] == "base-sepolia"
+    assert len(result["execution"]["transfers"]) == 1
+    transfer = result["execution"]["transfers"][0]
+    assert transfer["calldata"].startswith("0xa9059cbb")
+    assert transfer["to_wallet"] == _ALICE_WALLET
+
+
+def test_split_settle_group_not_found(monkeypatch):
+    monkeypatch.setenv("API_KEY", "testkey")
+    monkeypatch.setenv("GROUPS_TABLE", "test-groups")
+    monkeypatch.setattr(handler, "_get_group_participants", lambda gid: {})
+
+    settle_body = {
+        "currency": "USD",
+        "group_id": "nonexistent",
+        "participants": ["Alice", "Bob"],
+        "expenses": [{"paid_by": "Alice", "amount": 100, "split_among": ["Alice", "Bob"]}],
+    }
+    event = {
+        "rawPath": "/v1/split_settle",
+        "requestContext": {"http": {"method": "POST"}},
+        "headers": {"x-api-key": "testkey"},
+        "body": json.dumps(settle_body),
+    }
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 400
+    assert "not found" in json.loads(response["body"])["error"]
+
+
+def test_split_settle_participant_mismatch(monkeypatch):
+    monkeypatch.setenv("API_KEY", "testkey")
+    monkeypatch.setenv("GROUPS_TABLE", "test-groups")
+    # Group only has Alice, not Bob
+    monkeypatch.setattr(handler, "_get_group_participants",
+                        lambda gid: {"Alice": _ALICE_WALLET})
+
+    settle_body = {
+        "currency": "USD",
+        "group_id": "test-group",
+        "participants": ["Alice", "Bob"],
+        "expenses": [{"paid_by": "Alice", "amount": 100, "split_among": ["Alice", "Bob"]}],
+    }
+    event = {
+        "rawPath": "/v1/split_settle",
+        "requestContext": {"http": {"method": "POST"}},
+        "headers": {"x-api-key": "testkey"},
+        "body": json.dumps(settle_body),
+    }
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 400
+    assert "not found in group" in json.loads(response["body"])["error"]

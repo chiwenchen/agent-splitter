@@ -2,6 +2,111 @@ import { h, render } from 'preact';
 import { useState } from 'preact/hooks';
 import { html } from 'htm/preact';
 
+const i18n = {
+  en: {
+    title: 'SplitSettle',
+    subtitle: 'Split expenses instantly. No registration needed.',
+    participants: 'Participants',
+    addName: 'Add a name...',
+    expenses: 'Expenses',
+    addExpense: '+ Add Expense',
+    description: 'Description (optional)',
+    amount: 'Amount',
+    paidBy: 'Paid by',
+    splitAmong: 'Split among',
+    add: 'Add',
+    cancel: 'Cancel',
+    settlement: 'Settlement',
+    owes: 'owes',
+    total: 'total',
+    transfer: 'transfer',
+    transfers: 'transfers',
+    toSettle: 'to settle',
+    shareResults: 'Share Results',
+    generating: 'Generating...',
+    linkCreated: 'Link created!',
+    copyLink: 'Copy Link',
+    share: 'Share',
+    validFor: 'Valid for 30 days',
+    allSettled: 'Everyone is settled up!',
+    expense: 'Expense',
+    paid: 'paid',
+    splitWays: 'ways',
+    lang: 'EN',
+  },
+  'zh-TW': {
+    title: 'SplitSettle',
+    subtitle: '秒算分帳，免註冊、免下載',
+    participants: '參加者',
+    addName: '輸入名字...',
+    expenses: '帳單',
+    addExpense: '+ 新增帳單',
+    description: '說明（選填）',
+    amount: '金額',
+    paidBy: '誰付的',
+    splitAmong: '分給誰',
+    add: '新增',
+    cancel: '取消',
+    settlement: '結算',
+    owes: '要付給',
+    total: '總計',
+    transfer: '筆轉帳',
+    transfers: '筆轉帳',
+    toSettle: '即可結清',
+    shareResults: '分享結果',
+    generating: '產生中...',
+    linkCreated: '連結已產生！',
+    copyLink: '複製連結',
+    share: '分享',
+    validFor: '30 天內有效',
+    allSettled: '全部結清！不用轉帳',
+    expense: '消費',
+    paid: '付了',
+    splitWays: '人分',
+    lang: '中',
+  },
+  ja: {
+    title: 'SplitSettle',
+    subtitle: '割り勘を即計算。登録不要。',
+    participants: '参加者',
+    addName: '名前を入力...',
+    expenses: '支出',
+    addExpense: '+ 支出を追加',
+    description: '説明（任意）',
+    amount: '金額',
+    paidBy: '支払った人',
+    splitAmong: '割り勘メンバー',
+    add: '追加',
+    cancel: 'キャンセル',
+    settlement: '精算',
+    owes: '→',
+    total: '合計',
+    transfer: '件の送金',
+    transfers: '件の送金',
+    toSettle: 'で精算完了',
+    shareResults: '結果をシェア',
+    generating: '生成中...',
+    linkCreated: 'リンクを作成しました！',
+    copyLink: 'リンクをコピー',
+    share: 'シェア',
+    validFor: '30日間有効',
+    allSettled: '全員精算済み！',
+    expense: '支出',
+    paid: 'が支払い',
+    splitWays: '人で割り勘',
+    lang: 'JA',
+  },
+};
+
+function detectLang() {
+  const saved = localStorage.getItem('ss_lang');
+  if (saved && i18n[saved]) return saved;
+  const nav = (navigator.language || '').toLowerCase();
+  if (nav.startsWith('zh')) return 'zh-TW';
+  if (nav.startsWith('ja')) return 'ja';
+  return 'en';
+}
+
 function splitSettle(participants, expenses, currency) {
   if (participants.length < 2 || expenses.length === 0) return null;
   const pSet = new Set(participants);
@@ -33,7 +138,10 @@ function splitSettle(participants, expenses, currency) {
            summary: participants.map(p => ({ name: p, paid: paid[p]/100, owed: owed[p]/100, balance: bal[p]/100 })) };
 }
 
+const langOrder = ['en', 'zh-TW', 'ja'];
+
 function App() {
+  const [lang, setLang] = useState(detectLang());
   const [participants, setP] = useState(['']);
   const [expenses, setE] = useState([]);
   const [currency, setCurrency] = useState(localStorage.getItem('ss_currency') || 'TWD');
@@ -46,9 +154,16 @@ function App() {
   const [shareUrl, setShareUrl] = useState('');
   const [sharing, setSharing] = useState(false);
   const [error, setError] = useState('');
+  const t = i18n[lang];
   const names = participants.filter(p => p.trim());
   const result = splitSettle(names, expenses, currency);
 
+  function cycleLang() {
+    const idx = (langOrder.indexOf(lang) + 1) % langOrder.length;
+    const next = langOrder[idx];
+    setLang(next);
+    localStorage.setItem('ss_lang', next);
+  }
   function addName() {
     if (!newName.trim() || names.includes(newName.trim())) return;
     setP([...participants.filter(p=>p.trim()), newName.trim(), '']);
@@ -92,20 +207,27 @@ function App() {
     try { await navigator.clipboard.writeText(shareUrl); } catch(e) {}
   }
   function webShare() {
-    if (navigator.share) navigator.share({ title: 'SplitSettle', text: 'Check our expense split!', url: shareUrl });
+    if (navigator.share) navigator.share({ title: 'SplitSettle', text: t.shareResults, url: shareUrl });
   }
 
+  const nSett = result ? result.settlements.length : 0;
+
   return html`
-    <h1>SplitSettle</h1>
-    <div class="subtitle">Split expenses instantly. No registration needed.</div>
+    <div class="header-row">
+      <div>
+        <h1>${t.title}</h1>
+        <div class="subtitle">${t.subtitle}</div>
+      </div>
+      <button class="lang-btn" onClick=${cycleLang}>${t.lang}</button>
+    </div>
 
     <div class="section">
-      <div class="section-title">Participants</div>
+      <div class="section-title">${t.participants}</div>
       <div>
         ${names.map(n => html`<span class="chip" key=${n}>${n}<button onClick=${()=>removeName(n)}>x</button></span>`)}
       </div>
       <div class="row" style="margin-top:8px">
-        <input placeholder="Add a name..." value=${newName} onInput=${e=>setNewName(e.target.value)}
+        <input placeholder=${t.addName} value=${newName} onInput=${e=>setNewName(e.target.value)}
           onKeyDown=${e => e.key==='Enter' && addName()} />
         <button class="btn btn-outline" style="flex:0;padding:10px 16px" onClick=${addName}>+</button>
       </div>
@@ -113,7 +235,7 @@ function App() {
 
     <div class="section">
       <div class="row">
-        <div class="section-title" style="flex:1;margin:0;line-height:28px">Expenses</div>
+        <div class="section-title" style="flex:1;margin:0;line-height:28px">${t.expenses}</div>
         <select style="flex:0;width:80px;text-align:center" value=${currency} onChange=${e=>changeCurrency(e.target.value)}>
           <option>TWD</option><option>USD</option><option>JPY</option><option>EUR</option>
           <option>GBP</option><option>CNY</option><option>KRW</option><option>THB</option>
@@ -122,8 +244,8 @@ function App() {
       ${expenses.map((e,i) => html`
         <div class="expense-card" key=${i}>
           <div>
-            <div class="desc">${e.description || 'Expense'}</div>
-            <div class="meta">${e.paid_by} paid · split ${e.split_among.length} ways</div>
+            <div class="desc">${e.description || t.expense}</div>
+            <div class="meta">${e.paid_by} ${t.paid} · ${e.split_among.length} ${t.splitWays}</div>
           </div>
           <div style="display:flex;align-items:center;gap:12px">
             <span class="amount">${currency} ${e.amount.toLocaleString()}</span>
@@ -133,61 +255,61 @@ function App() {
       `)}
       ${showForm ? html`
         <div class="add-form">
-          <input placeholder="Description (optional)" value=${formDesc} onInput=${e=>setFormDesc(e.target.value)} style="margin-bottom:8px" />
-          <input placeholder="Amount" inputmode="decimal" value=${formAmt} onInput=${e=>setFormAmt(e.target.value)} style="margin-bottom:8px" />
+          <input placeholder=${t.description} value=${formDesc} onInput=${e=>setFormDesc(e.target.value)} style="margin-bottom:8px" />
+          <input placeholder=${t.amount} inputmode="decimal" value=${formAmt} onInput=${e=>setFormAmt(e.target.value)} style="margin-bottom:8px" />
           <select value=${formPayer} onChange=${e=>setFormPayer(e.target.value)} style="margin-bottom:8px">
             ${names.map(n => html`<option key=${n}>${n}</option>`)}
           </select>
-          <div class="section-title" style="margin-top:4px">Split among</div>
+          <div class="section-title" style="margin-top:4px">${t.splitAmong}</div>
           <div class="checkbox-group">
             ${names.map(n => html`<label key=${n}><input type="checkbox" checked=${formSplit.includes(n)} onChange=${()=>toggleSplit(n)} />${n}</label>`)}
           </div>
           <div class="row" style="margin-top:10px">
-            <button class="btn" onClick=${addExpense}>Add</button>
-            <button class="btn btn-outline" onClick=${()=>setShowForm(false)}>Cancel</button>
+            <button class="btn" onClick=${addExpense}>${t.add}</button>
+            <button class="btn btn-outline" onClick=${()=>setShowForm(false)}>${t.cancel}</button>
           </div>
         </div>
-      ` : html`<button class="btn btn-outline" onClick=${openForm} disabled=${names.length<2}>+ Add Expense</button>`}
+      ` : html`<button class="btn btn-outline" onClick=${openForm} disabled=${names.length<2}>${t.addExpense}</button>`}
     </div>
 
-    ${result && result.settlements.length > 0 ? html`
+    ${result && nSett > 0 ? html`
       <hr class="divider" />
       <div class="section">
-        <div class="section-title">Settlement</div>
+        <div class="section-title">${t.settlement}</div>
         ${result.settlements.map(s => html`
           <div class="result-item">
-            <span class="result-from">${s.from}</span> owes
+            <span class="result-from">${s.from}</span> ${t.owes}
             <span class="result-to"> ${s.to}</span>
             <span class="result-amount">${currency} ${s.amount.toLocaleString()}</span>
           </div>
         `)}
         <div class="summary-line">
-          ${currency} ${result.total.toLocaleString()} total · ${result.settlements.length} transfer${result.settlements.length>1?'s':''} to settle <span class="check">✓</span>
+          ${currency} ${result.total.toLocaleString()} ${t.total} · ${nSett} ${nSett>1?t.transfers:t.transfer} ${t.toSettle} <span class="check">✓</span>
         </div>
         ${shareUrl ? html`
           <div class="share-result">
-            <div style="margin-bottom:8px">Link created!</div>
+            <div style="margin-bottom:8px">${t.linkCreated}</div>
             <a href=${shareUrl}>${shareUrl}</a>
             <div class="row" style="margin-top:12px">
-              <button class="btn" onClick=${copyLink}>Copy Link</button>
-              ${navigator.share ? html`<button class="btn btn-outline" onClick=${webShare}>Share</button>` : ''}
+              <button class="btn" onClick=${copyLink}>${t.copyLink}</button>
+              ${navigator.share ? html`<button class="btn btn-outline" onClick=${webShare}>${t.share}</button>` : ''}
             </div>
-            <div style="margin-top:8px;font-size:12px;color:#666">Valid for 30 days</div>
+            <div style="margin-top:8px;font-size:12px;color:var(--text-muted)">${t.validFor}</div>
           </div>
         ` : html`
           <button class="btn btn-share" onClick=${share} disabled=${sharing}>
-            ${sharing ? 'Generating...' : 'Share Results'}
+            ${sharing ? t.generating : t.shareResults}
           </button>
         `}
         ${error ? html`<div class="error">${error}</div>` : ''}
       </div>
-    ` : result && result.settlements.length === 0 && expenses.length > 0 ? html`
+    ` : result && nSett === 0 && expenses.length > 0 ? html`
       <hr class="divider" />
-      <div class="summary-line">Everyone is settled up! <span class="check">✓</span></div>
+      <div class="summary-line">${t.allSettled} <span class="check">✓</span></div>
     ` : ''}
 
-    <div style="text-align:center;margin-top:40px;font-size:11px;color:#444">
-      <a href="/docs" style="color:#555">API Docs</a> · Powered by x402
+    <div style="text-align:center;margin-top:40px;font-size:11px;color:var(--text-muted)">
+      <a href="/docs" style="color:var(--text-secondary)">API Docs</a> · Powered by x402
     </div>
   `;
 }

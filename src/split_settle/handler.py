@@ -611,57 +611,74 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
   <title>SplitSettle - Split Bills Instantly</title>
   <meta name="description" content="Split expenses with friends. No registration, no app download. Share a link and settle up.">
   <style>
+    :root {
+      --bg-primary: #141820; --bg-card: #1c2029; --bg-input: #1c2029;
+      --bg-hover: #252a35; --bg-form: #181c24;
+      --border: #2a2f3a; --border-focus: #5b8def;
+      --text-primary: #e8eaf0; --text-secondary: #8b92a0; --text-muted: #555d6e;
+      --accent: #5b8def; --accent-hover: #4a7cde;
+      --green: #34d399; --green-dark: #059669; --green-bg: #0f2a20;
+      --red: #f87171; --red-hover: #ef4444;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-           background: #0a0a0a; color: #e0e0e0; min-height: 100vh; padding: 16px; }
+           background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; padding: 16px; }
     .container { max-width: 480px; margin: 0 auto; }
+    .header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
     h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; color: #fff; }
-    .subtitle { font-size: 13px; color: #888; margin-bottom: 24px; }
+    .subtitle { font-size: 13px; color: var(--text-secondary); }
+    .lang-btn { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary);
+                border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
+                letter-spacing: 0.5px; }
+    .lang-btn:hover { border-color: var(--accent); color: var(--accent); }
     .section { margin-bottom: 20px; }
-    .section-title { font-size: 13px; font-weight: 600; color: #999; text-transform: uppercase;
+    .section-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;
                      letter-spacing: 0.5px; margin-bottom: 8px; }
-    .chip { display: inline-flex; align-items: center; background: #1a1a1a; border: 1px solid #333;
+    .chip { display: inline-flex; align-items: center; background: var(--bg-card); border: 1px solid var(--border);
             border-radius: 20px; padding: 6px 12px; margin: 0 4px 6px 0; font-size: 14px; }
-    .chip button { background: none; border: none; color: #666; cursor: pointer; margin-left: 6px;
+    .chip button { background: none; border: none; color: var(--text-muted); cursor: pointer; margin-left: 6px;
                    font-size: 16px; padding: 0 2px; }
-    .chip button:hover { color: #e74c3c; }
-    input, select { background: #1a1a1a; border: 1px solid #333; color: #e0e0e0; border-radius: 8px;
-                    padding: 10px 12px; font-size: 14px; width: 100%; outline: none; }
-    input:focus, select:focus { border-color: #4a9eff; }
-    input::placeholder { color: #555; }
+    .chip button:hover { color: var(--red); }
+    input, select { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary);
+                    border-radius: 8px; padding: 10px 12px; font-size: 14px; width: 100%; outline: none;
+                    transition: border-color 0.15s; }
+    input:focus, select:focus { border-color: var(--border-focus); }
+    input::placeholder { color: var(--text-muted); }
     .row { display: flex; gap: 8px; margin-bottom: 8px; }
     .row > * { flex: 1; }
-    .btn { background: #4a9eff; color: #fff; border: none; border-radius: 8px; padding: 10px 16px;
-           font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; }
-    .btn:hover { background: #3a8eef; }
-    .btn:disabled { background: #333; color: #666; cursor: not-allowed; }
-    .btn-outline { background: transparent; border: 1px solid #333; color: #999; }
-    .btn-outline:hover { border-color: #4a9eff; color: #4a9eff; }
-    .btn-share { background: #10b981; font-size: 16px; padding: 14px; margin-top: 16px; }
-    .btn-share:hover { background: #0d9668; }
-    .expense-card { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 12px;
+    .btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 10px 16px;
+           font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; transition: background 0.15s; }
+    .btn:hover { background: var(--accent-hover); }
+    .btn:disabled { background: var(--bg-card); color: var(--text-muted); cursor: not-allowed; border: 1px solid var(--border); }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); }
+    .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-share { background: var(--green); font-size: 16px; padding: 14px; margin-top: 16px; }
+    .btn-share:hover { background: var(--green-dark); }
+    .expense-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 12px;
                     margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
     .expense-card .desc { font-size: 14px; }
-    .expense-card .amount { font-weight: 600; color: #4a9eff; }
-    .expense-card .meta { font-size: 12px; color: #666; }
-    .expense-card button { background: none; border: none; color: #444; cursor: pointer; font-size: 18px; }
-    .expense-card button:hover { color: #e74c3c; }
-    .divider { border: none; border-top: 2px solid #222; margin: 24px 0 16px; }
-    .result-item { padding: 8px 0; border-bottom: 1px solid #1a1a1a; }
-    .result-from { font-weight: 600; color: #e74c3c; }
-    .result-to { font-weight: 600; color: #10b981; }
+    .expense-card .amount { font-weight: 600; color: var(--accent); }
+    .expense-card .meta { font-size: 12px; color: var(--text-muted); }
+    .expense-card button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; }
+    .expense-card button:hover { color: var(--red); }
+    .divider { border: none; border-top: 2px solid var(--border); margin: 24px 0 16px; }
+    .result-item { padding: 8px 0; border-bottom: 1px solid var(--bg-card); }
+    .result-from { font-weight: 600; color: var(--red); }
+    .result-to { font-weight: 600; color: var(--green); }
     .result-amount { float: right; font-weight: 600; }
-    .summary-line { text-align: center; color: #888; font-size: 13px; margin-top: 12px; }
-    .check { color: #10b981; }
-    .share-result { text-align: center; margin-top: 16px; padding: 16px; background: #1a2a1a;
-                    border: 1px solid #10b981; border-radius: 8px; }
-    .share-result a { color: #10b981; word-break: break-all; }
-    .error { color: #e74c3c; font-size: 13px; margin-top: 8px; text-align: center; }
+    .summary-line { text-align: center; color: var(--text-secondary); font-size: 13px; margin-top: 12px; }
+    .check { color: var(--green); }
+    .share-result { text-align: center; margin-top: 16px; padding: 16px; background: var(--green-bg);
+                    border: 1px solid var(--green); border-radius: 8px; }
+    .share-result a { color: var(--green); word-break: break-all; }
+    .error { color: var(--red); font-size: 13px; margin-top: 8px; text-align: center; }
     .checkbox-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
     .checkbox-group label { display: flex; align-items: center; gap: 4px; font-size: 13px;
-                            background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 4px 10px; }
-    .checkbox-group input[type=checkbox] { width: auto; }
-    .add-form { background: #111; border: 1px solid #222; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+                            background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px;
+                            cursor: pointer; }
+    .checkbox-group label:hover { border-color: var(--accent); }
+    .checkbox-group input[type=checkbox] { width: auto; accent-color: var(--accent); }
+    .add-form { background: var(--bg-form); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 8px; }
   </style>
   <script type="importmap">{"imports":{"preact":"https://esm.sh/preact@10.25.4","preact/hooks":"https://esm.sh/preact@10.25.4/hooks","htm/preact":"https://esm.sh/htm@3.1.1/preact?external=preact"}}</script>
 </head>

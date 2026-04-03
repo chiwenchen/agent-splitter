@@ -738,6 +738,16 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
                            animation:shimmerSweep 2.5s ease-in-out infinite;pointer-events:none; }
     @keyframes receiptFloat{0%{left:100%}100%{left:-200%}}
     button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+    /* Golden border orbit animation */
+    @property --orbit-angle { syntax:'<angle>'; initial-value:0deg; inherits:false; }
+    @keyframes orbitSpin { to { --orbit-angle:360deg; } }
+    .input-orbit { position:relative;border-radius:14px; }
+    .input-orbit::before { content:'';position:absolute;inset:-2px;border-radius:14px;
+      background:conic-gradient(from var(--orbit-angle),transparent 0%,transparent 60%,#e8a84c 75%,#c88830 85%,transparent 100%);
+      animation:orbitSpin 2.5s linear infinite;z-index:0;
+      -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+      -webkit-mask-composite:xor;mask-composite:exclude;padding:2px; }
+    .input-orbit input { position:relative;z-index:1; }
   </style>
   <script type="importmap">{"imports":{"preact":"https://esm.sh/preact@10.25.4","preact/hooks":"https://esm.sh/preact@10.25.4/hooks","htm/preact":"https://esm.sh/htm@3.1.1/preact?external=preact","react":"https://esm.sh/preact@10.25.4/compat","boring-avatars":"https://esm.sh/boring-avatars@1?external=react"}}</script>
 </head>

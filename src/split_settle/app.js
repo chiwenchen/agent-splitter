@@ -65,6 +65,66 @@ function ArrowIcon() {
   </svg>`;
 }
 
+function SlideConfirm({label, onConfirm, disabled}) {
+  const [dragging, setDragging] = useState(false);
+  const [x, setX] = useState(0);
+  const [done, setDone] = useState(false);
+  const trackRef = {current: null};
+  const btnW = 140;
+
+  function getMax() {
+    const track = trackRef.current;
+    return track ? track.offsetWidth - btnW - 12 : 200;
+  }
+
+  function start(clientX) {
+    if (disabled || done) return;
+    setDragging(true);
+  }
+
+  function move(clientX) {
+    if (!dragging) return;
+    const track = trackRef.current;
+    if (!track) return;
+    const rect = track.getBoundingClientRect();
+    const newX = Math.max(0, Math.min(clientX - rect.left - btnW/2 - 6, getMax()));
+    setX(newX);
+  }
+
+  function end() {
+    if (!dragging) return;
+    setDragging(false);
+    if (x >= getMax() * 0.75) {
+      setX(getMax());
+      setDone(true);
+      onConfirm && onConfirm();
+    } else {
+      setX(0);
+    }
+  }
+
+  function reset() { setDone(false); setX(0); }
+
+  const progress = getMax() > 0 ? x / getMax() : 0;
+
+  return html`
+    <div class="confirm" ref=${el => trackRef.current = el}
+      onMouseMove=${e => move(e.clientX)} onMouseUp=${end} onMouseLeave=${end}
+      onTouchMove=${e => move(e.touches[0].clientX)} onTouchEnd=${end}>
+      <div class="confirm-bg" style="opacity:${progress}"></div>
+      <button class="confirm-btn" style="transform:translateX(${x}px);cursor:${done?'default':'grab'}"
+        onMouseDown=${e => start(e.clientX)}
+        onTouchStart=${e => start(e.touches[0].clientX)}
+        disabled=${disabled}>
+        ${done ? '✓' : label}
+      </button>
+      ${!done ? html`<div class="confirm-arrows" style="opacity:${1 - progress}">
+        <${ArrowIcon}/><${ArrowIcon}/><${ArrowIcon}/><${ArrowIcon}/><${ArrowIcon}/>
+      </div>` : ''}
+    </div>
+  `;
+}
+
 function splitSettle(participants, expenses, currency) {
   if (participants.length < 2 || expenses.length === 0) return null;
   const pSet = new Set(participants);
@@ -225,9 +285,9 @@ function App() {
             }
             return groups.map((g, i) => html`
               <div key=${i} style="margin-bottom:${i < groups.length - 1 ? '12px' : '0'};padding-bottom:${i < groups.length - 1 ? '12px;border-bottom:1px dashed #3a5e5e' : '0'}">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                  <span style="font-size:13px;color:#e0d5c4">${g.descs.join(' + ')}</span>
-                  <span style="font-weight:700;color:#e8a84c;font-size:14px">${currency} ${g.total.toLocaleString()}</span>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
+                  <span style="font-size:13px;color:#e0d5c4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${g.descs.join(' + ')}</span>
+                  <span style="font-weight:700;color:#e8a84c;font-size:14px;white-space:nowrap;flex-shrink:0">${currency} ${g.total.toLocaleString()}</span>
                 </div>
                 <div style="display:flex;gap:8px">
                   ${g.members.map(n => html`<div key=${n} style="display:flex;align-items:center;gap:4px">
@@ -267,10 +327,7 @@ function App() {
             <div style="margin-top:8px;font-size:12px;color:var(--text-dim)">${t.validFor}</div>
           </div>
         ` : html`
-          <div class="confirm" onClick=${()=>{if(!sharing)share()}}>
-            <button class="confirm-btn" disabled=${sharing}>${sharing?t.generating:t.shareResults}</button>
-            <div class="confirm-arrows"><${ArrowIcon}/><${ArrowIcon}/><${ArrowIcon}/><${ArrowIcon}/><${ArrowIcon}/></div>
-          </div>
+          <${SlideConfirm} label=${t.shareResults} onConfirm=${share} disabled=${sharing} />
         `}
         ${error?html`<div class="error">${error}</div>`:''}
       </div>

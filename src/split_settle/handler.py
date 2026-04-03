@@ -700,10 +700,15 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
     .error { color:#e88060;font-size:13px;margin-top:8px;text-align:center; }
     .confirm { background:var(--layer-2);border:none;border-radius:28px;padding:6px;
                display:flex;align-items:center;margin-top:16px;box-shadow:var(--neu-in);
-               overflow:hidden;position:relative;width:100%; }
+               overflow:hidden;position:relative;width:100%;user-select:none;-webkit-user-select:none;
+               touch-action:none; }
+    .confirm-bg { position:absolute;left:0;top:0;bottom:0;right:0;border-radius:28px;
+                  background:linear-gradient(90deg,var(--accent),var(--accent-dark));
+                  transition:opacity 0.1s; }
     .confirm-btn { background:var(--layer-1);color:var(--accent);border:none;border-radius:22px;
-                   padding:12px 20px;font-size:14px;font-weight:700;cursor:pointer;z-index:1;
-                   box-shadow:var(--neu-out);white-space:nowrap; }
+                   padding:12px 20px;font-size:14px;font-weight:700;cursor:grab;z-index:2;
+                   box-shadow:var(--neu-out);white-space:nowrap;transition:none;min-width:140px;text-align:center; }
+    .confirm-btn:active { cursor:grabbing; }
     .confirm-arrows { display:flex;align-items:center;margin-left:12px; }
     .arrow-icon { width:20px;height:20px;color:var(--text-dim);margin-left:-6px;
                   animation:arrowFlow 2s infinite;opacity:0; }

@@ -951,16 +951,22 @@ NOT_FOUND_HTML = """<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SplitSettle - Not Found</title>
   <style>
-    body { font-family: -apple-system, system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0;
-           display: flex; justify-content: center; align-items: center; min-height: 100vh; text-align: center; }
-    a { color: #4a9eff; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    * { margin:0;padding:0;box-sizing:border-box; }
+    body { font-family:'Inter',-apple-system,system-ui,sans-serif; background:#d5d0c8;
+           display:flex;justify-content:center;align-items:center;min-height:100vh;padding:16px; }
+    .card { background:#2d4a4a;border-radius:28px;padding:40px;text-align:center;color:#e0d5c4;
+            box-shadow:12px 12px 12px rgba(30,50,50,0.4);max-width:380px;width:100%; }
+    h2 { color:#e8a84c;font-size:20px;margin-bottom:8px; }
+    p { color:#8aaa9e;margin-bottom:24px;font-size:14px; }
+    a { display:inline-block;background:linear-gradient(135deg,#e8a84c,#c88830);color:#1e3636;
+        text-decoration:none;padding:12px 24px;border-radius:12px;font-weight:700;font-size:14px;
+        box-shadow:4px 4px 8px rgba(10,30,30,0.4),-2px -2px 4px rgba(60,100,100,0.1); }
   </style>
 </head>
 <body>
-  <div>
-    <h2 style="color:#fff;margin-bottom:8px">Split not found</h2>
-    <p style="color:#888;margin-bottom:24px">This split has expired or doesn't exist.</p>
+  <div class="card">
+    <h2>Split not found</h2>
+    <p>This split has expired or doesn't exist.</p>
     <a href="/">Create a new split →</a>
   </div>
 </body>
@@ -976,39 +982,56 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
   <meta property="og:description" content="{{og_desc}}" />
   <meta property="og:type" content="website" />
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0;
-           min-height: 100vh; padding: 16px; }
-    .container { max-width: 480px; margin: 0 auto; }
-    h1 { font-size: 20px; color: #fff; margin-bottom: 4px; }
-    .date { font-size: 12px; color: #666; margin-bottom: 20px; }
-    .participants { font-size: 14px; color: #888; margin-bottom: 4px; }
-    .total { font-size: 14px; color: #888; margin-bottom: 20px; }
-    .settlement { padding: 10px 0; border-bottom: 1px solid #1a1a1a; font-size: 15px; }
-    .from { color: #e74c3c; font-weight: 600; }
-    .to { color: #10b981; font-weight: 600; }
-    .amount { float: right; font-weight: 600; }
-    .summary { text-align: center; color: #888; font-size: 13px; margin: 16px 0; }
-    .check { color: #10b981; }
-    .cta { text-align: center; margin-top: 40px; padding: 20px; border-top: 1px solid #1a1a1a; }
-    .cta a { display: inline-block; background: #4a9eff; color: #fff; text-decoration: none;
-             padding: 12px 24px; border-radius: 8px; font-weight: 600; }
-    .cta a:hover { background: #3a8eef; }
-    .cta p { color: #666; font-size: 13px; margin-bottom: 12px; }
+    * { margin:0;padding:0;box-sizing:border-box; }
+    body { font-family:'Inter',-apple-system,system-ui,sans-serif; background:#d5d0c8;
+           min-height:100vh; display:flex; justify-content:center; padding:16px; }
+    .phone { width:100%;max-width:420px;background:#2d4a4a;border-radius:28px;padding:28px;
+             color:#e0d5c4;box-shadow:12px 12px 12px rgba(30,50,50,0.4);margin:0 auto;height:fit-content; }
+    @media(max-width:460px){body{padding:0}.phone{border-radius:0;min-height:100vh}}
+    h1 { font-size:24px;font-weight:800;color:#e8a84c;margin-bottom:2px; }
+    .date { font-size:12px;color:#5a7a70;margin-bottom:20px; }
+    .info { font-size:14px;color:#8aaa9e;margin-bottom:4px; }
+    .divider { border:none;height:2px;margin:20px 0;
+               background:linear-gradient(90deg,transparent,#e8a84c,#8aaa9e,#e8a84c,transparent); }
+    @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    .settlement { background:linear-gradient(135deg,#e8a84c,#c88830);color:#1e3636;
+                  border-radius:12px;padding:12px 16px;margin-bottom:8px;font-size:15px;
+                  display:flex;justify-content:space-between;align-items:center;
+                  box-shadow:4px 4px 8px rgba(10,30,30,0.4),-2px -2px 4px rgba(60,100,100,0.1);
+                  animation:slideIn 0.3s ease-out both;animation-delay:calc(var(--i,0)*0.1s); }
+    .from { font-weight:700;color:#5a2020; }
+    .to { font-weight:700;color:#1a4a3a; }
+    .amount { font-weight:800;font-size:16px; }
+    .summary { text-align:center;background:#1e3636;padding:10px 16px;border-radius:12px;
+               font-size:12px;color:#8aaa9e;margin-top:10px;
+               box-shadow:inset -3px 3px 6px rgba(10,30,30,0.5),inset 3px -3px 6px rgba(60,100,100,0.15); }
+    .check { color:#e8a84c; }
+    .cta { text-align:center;margin-top:30px;padding-top:20px;
+           border-top:2px solid transparent;
+           background-image:linear-gradient(#2d4a4a,#2d4a4a),linear-gradient(90deg,transparent,#e8a84c,#8aaa9e,#e8a84c,transparent);
+           background-origin:padding-box,border-box;background-clip:padding-box,border-box; }
+    .cta p { color:#5a7a70;font-size:13px;margin-bottom:12px; }
+    .cta a { display:inline-block;background:linear-gradient(135deg,#e8a84c,#c88830);color:#1e3636;
+             text-decoration:none;padding:12px 24px;border-radius:12px;font-weight:700;
+             box-shadow:4px 4px 8px rgba(10,30,30,0.4),-2px -2px 4px rgba(60,100,100,0.1); }
+    .footer { text-align:center;margin-top:20px;font-size:10px;color:#5a7a70; }
+    .footer a { color:#8aaa9e; }
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="phone">
     <h1>SplitSettle</h1>
     <div class="date">{{date}}</div>
-    <div class="participants">{{participants}}</div>
-    <div class="total">Total: {{currency}} {{total}}</div>
+    <div class="info">{{participants}}</div>
+    <div class="info" style="margin-bottom:16px">Total: {{currency}} {{total}}</div>
+    <hr class="divider">
     {{settlements_html}}
     <div class="summary">{{num_settlements}} transfer{{s_plural}} to settle <span class="check">✓</span></div>
     <div class="cta">
       <p>Need to split a bill?</p>
       <a href="/">Start splitting →</a>
     </div>
+    <div class="footer"><a href="/docs">API Docs</a> · Powered by x402</div>
   </div>
 </body>
 </html>"""
@@ -1024,11 +1047,11 @@ def _render_share_page(result: dict, created_at: str = "") -> str:
     n_sett = len(settlements)
 
     settlements_html = ""
-    for s in settlements:
+    for i, s in enumerate(settlements):
         settlements_html += (
-            f'<div class="settlement">'
-            f'<span class="from">{s["from"]}</span> owes '
-            f'<span class="to">{s["to"]}</span>'
+            f'<div class="settlement" style="--i:{i}">'
+            f'<span><span class="from">{s["from"]}</span> → '
+            f'<span class="to">{s["to"]}</span></span>'
             f'<span class="amount">{currency} {s["amount"]:,.2f}</span>'
             f'</div>'
         )

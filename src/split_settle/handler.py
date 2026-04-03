@@ -663,6 +663,15 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
     .checkbox-group input[type=checkbox] { width: auto; }
     .add-form { background: #111; border: 1px solid #222; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
   </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "preact": "https://esm.sh/preact@10.25.4",
+      "preact/hooks": "https://esm.sh/preact@10.25.4/hooks",
+      "htm/preact": "https://esm.sh/htm@3.1.1/preact?external=preact"
+    }
+  }
+  </script>
 </head>
 <body>
   <div class="container" id="app"></div>

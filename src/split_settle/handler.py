@@ -739,15 +739,15 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
     @keyframes receiptFloat{0%{left:100%}100%{left:-200%}}
     button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     /* Golden border orbit animation */
-    @property --orbit-angle { syntax:'<angle>'; initial-value:0deg; inherits:false; }
-    @keyframes orbitSpin { to { --orbit-angle:360deg; } }
-    .input-orbit { position:relative;border-radius:14px; }
-    .input-orbit::before { content:'';position:absolute;inset:-2px;border-radius:14px;
-      background:conic-gradient(from var(--orbit-angle),transparent 0%,transparent 60%,#e8a84c 75%,#c88830 85%,transparent 100%);
-      animation:orbitSpin 2.5s linear infinite;z-index:0;
-      -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
-      -webkit-mask-composite:xor;mask-composite:exclude;padding:2px; }
-    .input-orbit input { position:relative;z-index:1; }
+    @keyframes orbitSpin { to { transform:rotate(360deg); } }
+    .input-orbit { position:relative;border-radius:14px;overflow:hidden;padding:2px; }
+    .input-orbit::before { content:'';position:absolute;
+      top:50%;left:50%;width:200%;height:200%;
+      transform-origin:center;
+      background:conic-gradient(from 0deg,transparent 0%,transparent 70%,#e8a84c 80%,#ffd080 85%,#e8a84c 90%,transparent 100%);
+      animation:orbitSpin 2.5s linear infinite; }
+    .input-orbit::after { content:'';position:absolute;inset:2px;border-radius:12px;background:var(--layer-2);z-index:0; }
+    .input-orbit input { position:relative;z-index:1;border-radius:12px; }
   </style>
   <script type="importmap">{"imports":{"preact":"https://esm.sh/preact@10.25.4","preact/hooks":"https://esm.sh/preact@10.25.4/hooks","htm/preact":"https://esm.sh/htm@3.1.1/preact?external=preact","react":"https://esm.sh/preact@10.25.4/compat","boring-avatars":"https://esm.sh/boring-avatars@1?external=react"}}</script>
 </head>

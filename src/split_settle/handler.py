@@ -738,32 +738,17 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
                            animation:shimmerSweep 2.5s ease-in-out infinite;pointer-events:none; }
     @keyframes receiptFloat{0%{left:100%}100%{left:-200%}}
     button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-    /* Golden border orbit — faithful port of CodePen #b */
-    @property --orb-r { syntax:"<angle>"; inherits:false; initial-value:0deg; }
-    @property --orb-x { syntax:"<length>"; inherits:false; initial-value:14px; }
+    /* Golden border orbit — #a style with wide bright band */
+    @property --orb-a { syntax:"<angle>"; inherits:false; initial-value:0deg; }
+    @keyframes orbA { to { --orb-a:360deg; } }
     .input-orbit { position:relative;border-radius:14px; }
     .input-orbit::before { content:'';position:absolute;inset:0;border-radius:14px;z-index:0;
-      background:conic-gradient(from calc(var(--orb-r) - 80deg) at var(--orb-x) 22px,
-        #1e3636 0%,#ffd080 10%,#e8a84c 15%,#1e3636 25%);
-      animation:-0.5s orb-spin 3s linear infinite, -0.5s orb-move 3s linear infinite; }
+      background:conic-gradient(from var(--orb-a),
+        transparent 0%,transparent 40%,#c88830 50%,#ffd080 55%,#e8a84c 60%,#c88830 65%,transparent 75%);
+      animation:orbA 2.5s linear infinite; }
     .input-orbit::after { content:'';position:absolute;inset:2px;border-radius:12px;
       background:var(--layer-2);z-index:1; }
     .input-orbit input { position:relative;z-index:2; }
-    /* input ~360x44, ratio ~8:1, straight portion = w/(w+pi*h) * 50% ≈ 35% */
-    @keyframes orb-move {
-      0%    { --orb-x:14px; }
-      35%   { --orb-x:calc(100% - 14px); }
-      50%   { --orb-x:calc(100% - 14px); }
-      85%   { --orb-x:14px; }
-      100%  { --orb-x:14px; }
-    }
-    @keyframes orb-spin {
-      0%    { --orb-r:0deg; }
-      35%   { --orb-r:0deg; }
-      50%   { --orb-r:180deg; }
-      85%   { --orb-r:180deg; }
-      100%  { --orb-r:360deg; }
-    }
   </style>
   <script type="importmap">{"imports":{"preact":"https://esm.sh/preact@10.25.4","preact/hooks":"https://esm.sh/preact@10.25.4/hooks","htm/preact":"https://esm.sh/htm@3.1.1/preact?external=preact","react":"https://esm.sh/preact@10.25.4/compat","boring-avatars":"https://esm.sh/boring-avatars@1?external=react"}}</script>
 </head>

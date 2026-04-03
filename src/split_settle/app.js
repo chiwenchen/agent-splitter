@@ -188,7 +188,7 @@ function App() {
   async function share() {
     if(!result||nSett===0)return; setSharing(true);setError('');setShareUrl('');
     try {
-      const body={currency,participants:names,expenses:expenses.map(e=>({description:e.description,paid_by:e.paid_by,amount:e.amount,split_among:e.split_among}))};
+      const body={currency,participants:names,expenses:expenses.map(e=>({description:e.description,paid_by:e.paid_by,amount:e.amount,split_among:e.split_among})),lang};
       const res=await fetch('/v1/share',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       if(!res.ok){const d=await res.json().catch(()=>({}));throw new Error(d.error||'Failed');}
       const data=await res.json(); setShareUrl(window.location.origin+data.url);
@@ -323,9 +323,8 @@ function App() {
             <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(shareUrl)}&bgcolor=1e3636&color=e8a84c"
                  alt="QR" style="width:140px;height:140px;border-radius:12px;margin-bottom:12px;border:3px solid #3a5e5e" />
             <div style="display:flex;gap:6px;justify-content:center">
-              <button class="btn" style="flex:1;font-size:12px;padding:10px 8px" onClick=${copyLink}>📋 ${t.copyLink}</button>
-              <button class="btn-outline" style="flex:1;font-size:12px;padding:10px 8px" onClick=${()=>{window.open(shareUrl,'_blank')}}>🔗 QR</button>
-              ${navigator.share?html`<button class="btn-outline" style="flex:1;font-size:12px;padding:10px 8px" onClick=${webShare}>📤 ${t.share}</button>`:''}
+              <button class="btn" style="flex:1;font-size:12px;padding:10px 8px" onClick=${copyLink}>${t.copyLink}</button>
+              ${navigator.share?html`<button class="btn-outline" style="flex:1;font-size:12px;padding:10px 8px" onClick=${webShare}>${t.share}</button>`:''}
             </div>
             <div style="margin-top:8px;font-size:11px;color:var(--text-dim)">${t.validFor}</div>
           </div>

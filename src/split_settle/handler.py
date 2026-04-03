@@ -1028,21 +1028,21 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
   <div class="phone">
-    <h1>Split Senpai</h1>
+    <h1>{{share_title}}</h1>
     <div class="date">{{date}}</div>
     <div class="info">{{participants}}</div>
     <div class="info" style="margin-bottom:16px">Total: {{currency}} {{total}}</div>
-    <div style="font-size:11px;color:#5a7a70;margin-bottom:8px">I am...</div>
+    <div style="font-size:11px;color:#5a7a70;margin-bottom:8px">{{iam}}</div>
     <div class="me-picker">
-      <button class="me-btn active" onclick="filterMe('')">All</button>
+      <button class="me-btn active" onclick="filterMe('')">{{all_label}}</button>
       {{me_buttons}}
     </div>
     <hr class="divider">
     {{settlements_html}}
     <div class="summary">{{num_settlements}} transfer{{s_plural}} to settle <span class="check">✓</span></div>
     <div class="cta">
-      <p>Need to split a bill?</p>
-      <a href="/">Start splitting →</a>
+      <p>{{cta_q}}</p>
+      <a href="/">{{cta_btn}}</a>
     </div>
     <div class="footer"><a href="/docs">API Docs</a> · Powered by x402</div>
   </div>
@@ -1060,7 +1060,7 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
 </html>"""
 
 
-def _render_share_page(result: dict, created_at: str = "") -> str:
+def _render_share_page(result: dict, created_at: str = "", si: dict = None) -> str:
     """Render the share page HTML from a split result."""
     currency = result.get("currency", "")
     total = result.get("total_expenses", 0)
@@ -1096,6 +1096,11 @@ def _render_share_page(result: dict, created_at: str = "") -> str:
         "{{settlements_html}}": settlements_html,
         "{{num_settlements}}": str(n_sett),
         "{{s_plural}}": s_plural,
+        "{{share_title}}": si.get("title", "Split Senpai") if si else "Split Senpai",
+        "{{iam}}": si.get("iam", "I am...") if si else "I am...",
+        "{{all_label}}": si.get("all", "All") if si else "All",
+        "{{cta_q}}": si.get("cta_q", "Need to split a bill?") if si else "Need to split a bill?",
+        "{{cta_btn}}": si.get("cta", "Start splitting →") if si else "Start splitting →",
     }
     html = SHARE_PAGE_TEMPLATE
     for key, value in replacements.items():
@@ -1216,13 +1221,15 @@ def _handle_share(event):
     """POST /v1/share — public endpoint, saves split result, returns share link."""
     try:
         body = json.loads(event.get("body") or "{}")
+        lang = body.pop("lang", "en")
         result = split_settle(body)
         share_id = _generate_share_id()
         _save_share(share_id, body, result)
+        url = f"/s/{share_id}" + (f"?lang={lang}" if lang != "en" else "")
         return {
             "statusCode": 200,
             "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"share_id": share_id, "url": f"/s/{share_id}"}),
+            "body": json.dumps({"share_id": share_id, "url": url}),
         }
     except ValueError as e:
         return {
@@ -1239,10 +1246,17 @@ def _handle_share(event):
         }
 
 
+_SHARE_I18N = {
+    "en": {"title": "Split Senpai", "iam": "I am...", "all": "All", "cta_q": "Need to split a bill?", "cta": "Start splitting →"},
+    "zh-TW": {"title": "分帳仙貝", "iam": "我是...", "all": "全部", "cta_q": "也要分帳？", "cta": "開始分帳 →"},
+    "ja": {"title": "割り勘先輩", "iam": "私は...", "all": "全部", "cta_q": "割り勘する？", "cta": "始める →"},
+}
+
+
 def _handle_share_page(event):
     """GET /s/{id} — render shared result page."""
     path = event.get("rawPath", "")
-    share_id = path.split("/s/", 1)[-1] if "/s/" in path else ""
+    share_id = path.split("/s/", 1)[-1].split("?")[0] if "/s/" in path else ""
     if not share_id:
         return {"statusCode": 404, "headers": {"Content-Type": "text/html"}, "body": NOT_FOUND_HTML}
 
@@ -1250,8 +1264,12 @@ def _handle_share_page(event):
     if not data or data["ttl_expiry"] < time.time():
         return {"statusCode": 404, "headers": {"Content-Type": "text/html"}, "body": NOT_FOUND_HTML}
 
-    html = _render_share_page(data["result"], data["created_at"])
-    return {"statusCode": 200, "headers": {"Content-Type": "text/html"}, "body": html}
+    qs = event.get("queryStringParameters") or {}
+    lang = qs.get("lang", "en")
+    si = _SHARE_I18N.get(lang, _SHARE_I18N["en"])
+
+    html_out = _render_share_page(data["result"], data["created_at"], si)
+    return {"statusCode": 200, "headers": {"Content-Type": "text/html"}, "body": html_out}
 
 
 def _handle_split_settle(event):

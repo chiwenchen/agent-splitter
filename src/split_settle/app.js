@@ -1,7 +1,6 @@
-import { h, render } from 'https://unpkg.com/preact@10/dist/preact.module.js';
-import { useState } from 'https://unpkg.com/preact@10/hooks/dist/hooks.module.js';
-import htm from 'https://unpkg.com/htm@3?module';
-const html = htm.bind(h);
+import { h, render } from 'preact';
+import { useState } from 'preact/hooks';
+import { html } from 'htm/preact';
 
 function splitSettle(participants, expenses, currency) {
   if (participants.length < 2 || expenses.length === 0) return null;

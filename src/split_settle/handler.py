@@ -612,20 +612,23 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
   <meta name="description" content="Split expenses with friends. No registration, no app download. Share a link and settle up.">
   <style>
     :root {
-      --bg-primary: #141820; --bg-card: #1c2029; --bg-input: #1c2029;
-      --bg-hover: #252a35; --bg-form: #181c24;
-      --border: #2a2f3a; --border-focus: #5b8def;
-      --text-primary: #e8eaf0; --text-secondary: #8b92a0; --text-muted: #555d6e;
-      --accent: #5b8def; --accent-hover: #4a7cde;
-      --green: #34d399; --green-dark: #059669; --green-bg: #0f2a20;
-      --red: #f87171; --red-hover: #ef4444;
+      --bg-primary: #f0fdf9; --bg-card: #fff; --bg-input: #fff;
+      --bg-hover: #e0faf2; --bg-form: #e8fcf5;
+      --border: #b0e0d0; --border-focus: #14b8a6;
+      --text-primary: #1a3a35; --text-secondary: #5a8a80; --text-muted: #8ab5aa;
+      --accent: #14b8a6; --accent-hover: #0d9488;
+      --green: #14b8a6; --green-dark: #0d9488; --green-bg: #e0faf2;
+      --red: #f97066; --red-hover: #e5453a;
+      --tag-blue-bg: #dbeafe; --tag-blue: #2563eb;
+      --tag-amber-bg: #fef3c7; --tag-amber: #b45309;
+      --result-bg: #fff1f0; --result-border: #fecdd3;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
            background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; padding: 16px; }
     .container { max-width: 480px; margin: 0 auto; }
     .header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-    h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; color: #fff; }
+    h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; color: var(--text-primary); }
     .subtitle { font-size: 13px; color: var(--text-secondary); }
     .lang-btn { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary);
                 border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
@@ -635,7 +638,8 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
     .section-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;
                      letter-spacing: 0.5px; margin-bottom: 8px; }
     .chip { display: inline-flex; align-items: center; background: var(--bg-card); border: 1px solid var(--border);
-            border-radius: 20px; padding: 6px 12px; margin: 0 4px 6px 0; font-size: 14px; }
+            border-radius: 20px; padding: 6px 12px; margin: 0 4px 6px 0; font-size: 14px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
     .chip button { background: none; border: none; color: var(--text-muted); cursor: pointer; margin-left: 6px;
                    font-size: 16px; padding: 0 2px; }
     .chip button:hover { color: var(--red); }
@@ -652,25 +656,33 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
     .btn:disabled { background: var(--bg-card); color: var(--text-muted); cursor: not-allowed; border: 1px solid var(--border); }
     .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); }
     .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
-    .btn-share { background: var(--green); font-size: 16px; padding: 14px; margin-top: 16px; }
-    .btn-share:hover { background: var(--green-dark); }
+    .btn-share { background: var(--accent); font-size: 16px; padding: 14px; margin-top: 16px;
+                 box-shadow: 0 4px 12px rgba(20,184,166,0.3); }
+    .btn-share:hover { background: var(--accent-hover); }
     .expense-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 12px;
-                    margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+                    margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
     .expense-card .desc { font-size: 14px; }
     .expense-card .amount { font-weight: 600; color: var(--accent); }
     .expense-card .meta { font-size: 12px; color: var(--text-muted); }
     .expense-card button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; }
     .expense-card button:hover { color: var(--red); }
     .divider { border: none; border-top: 2px solid var(--border); margin: 24px 0 16px; }
-    .result-item { padding: 8px 0; border-bottom: 1px solid var(--bg-card); }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes fadeGlow { 0%,100% { box-shadow: 0 1px 4px rgba(249,112,102,0.1); }
+                          50% { box-shadow: 0 2px 12px rgba(249,112,102,0.2); } }
+    .result-item { padding: 10px 12px; margin-bottom: 6px; border-radius: 8px;
+                   background: var(--result-bg); border: 1px solid var(--result-border);
+                   animation: slideIn 0.3s ease-out both, fadeGlow 3s ease-in-out infinite;
+                   animation-delay: calc(var(--i, 0) * 0.1s), 0s; }
     .result-from { font-weight: 600; color: var(--red); }
-    .result-to { font-weight: 600; color: var(--green); }
-    .result-amount { float: right; font-weight: 600; }
+    .result-to { font-weight: 600; color: var(--accent); }
+    .result-amount { float: right; font-weight: 700; }
     .summary-line { text-align: center; color: var(--text-secondary); font-size: 13px; margin-top: 12px; }
-    .check { color: var(--green); }
+    .check { color: var(--accent); }
     .share-result { text-align: center; margin-top: 16px; padding: 16px; background: var(--green-bg);
-                    border: 1px solid var(--green); border-radius: 8px; }
-    .share-result a { color: var(--green); word-break: break-all; }
+                    border: 1px solid var(--accent); border-radius: 8px; }
+    .share-result a { color: var(--accent); word-break: break-all; }
     .error { color: var(--red); font-size: 13px; margin-top: 8px; text-align: center; }
     .checkbox-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
     .checkbox-group label { display: flex; align-items: center; gap: 4px; font-size: 13px;

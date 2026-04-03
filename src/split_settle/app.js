@@ -318,13 +318,15 @@ function App() {
 
         ${shareUrl ? html`
           <div class="share-result">
-            <div style="margin-bottom:8px">${t.linkCreated}</div>
-            <a href=${shareUrl}>${shareUrl}</a>
-            <div class="row" style="margin-top:12px">
-              <button class="btn" onClick=${copyLink}>${t.copyLink}</button>
-              ${navigator.share?html`<button class="btn-outline" onClick=${webShare}>${t.share}</button>`:''}
+            <div style="margin-bottom:12px;font-weight:600">${t.linkCreated}</div>
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(shareUrl)}&bgcolor=1e3636&color=e8a84c"
+                 alt="QR" style="width:140px;height:140px;border-radius:12px;margin-bottom:12px;border:3px solid #3a5e5e" />
+            <div style="display:flex;gap:6px;justify-content:center">
+              <button class="btn" style="flex:1;font-size:12px;padding:10px 8px" onClick=${copyLink}>📋 ${t.copyLink}</button>
+              <button class="btn-outline" style="flex:1;font-size:12px;padding:10px 8px" onClick=${()=>{window.open(shareUrl,'_blank')}}>🔗 QR</button>
+              ${navigator.share?html`<button class="btn-outline" style="flex:1;font-size:12px;padding:10px 8px" onClick=${webShare}>📤 ${t.share}</button>`:''}
             </div>
-            <div style="margin-top:8px;font-size:12px;color:var(--text-dim)">${t.validFor}</div>
+            <div style="margin-top:8px;font-size:11px;color:var(--text-dim)">${t.validFor}</div>
           </div>
         ` : html`
           <${SlideConfirm} label=${t.shareResults} onConfirm=${share} disabled=${sharing} />

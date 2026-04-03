@@ -1016,6 +1016,14 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
              box-shadow:4px 4px 8px rgba(10,30,30,0.4),-2px -2px 4px rgba(60,100,100,0.1); }
     .footer { text-align:center;margin-top:20px;font-size:10px;color:#5a7a70; }
     .footer a { color:#8aaa9e; }
+    /* Select yourself */
+    .me-picker { display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px; }
+    .me-btn { background:#1e3636;border:none;color:#8aaa9e;border-radius:16px;padding:6px 14px;
+              font-size:12px;font-weight:600;cursor:pointer;
+              box-shadow:4px 4px 8px rgba(10,30,30,0.4),-2px -2px 4px rgba(60,100,100,0.1); }
+    .me-btn.active { background:#e8a84c;color:#1e3636; }
+    .settlement.dimmed { opacity:0.3;transform:scale(0.97);filter:grayscale(0.5); }
+    .settlement { transition:opacity 0.3s,transform 0.3s,filter 0.3s; }
   </style>
 </head>
 <body>
@@ -1024,6 +1032,11 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
     <div class="date">{{date}}</div>
     <div class="info">{{participants}}</div>
     <div class="info" style="margin-bottom:16px">Total: {{currency}} {{total}}</div>
+    <div style="font-size:11px;color:#5a7a70;margin-bottom:8px">I am...</div>
+    <div class="me-picker">
+      <button class="me-btn active" onclick="filterMe('')">All</button>
+      {{me_buttons}}
+    </div>
     <hr class="divider">
     {{settlements_html}}
     <div class="summary">{{num_settlements}} transfer{{s_plural}} to settle <span class="check">✓</span></div>
@@ -1033,6 +1046,16 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
     </div>
     <div class="footer"><a href="/docs">API Docs</a> · Powered by x402</div>
   </div>
+  <script>
+  function filterMe(name) {
+    document.querySelectorAll('.me-btn').forEach(b => b.classList.toggle('active', b.dataset.name === name || (!name && !b.dataset.name)));
+    document.querySelectorAll('.settlement').forEach(s => {
+      if (!name) { s.classList.remove('dimmed'); return; }
+      const text = s.textContent;
+      s.classList.toggle('dimmed', !text.includes(name));
+    });
+  }
+  </script>
 </body>
 </html>"""
 
@@ -1056,6 +1079,10 @@ def _render_share_page(result: dict, created_at: str = "") -> str:
             f'</div>'
         )
 
+    me_buttons = ""
+    for name in names:
+        me_buttons += f'<button class="me-btn" data-name="{name}" onclick="filterMe(\'{name}\')">{name}</button>'
+
     s_plural = "s" if n_sett != 1 else ""
     replacements = {
         "{{title}}": f"{currency} {total:,.0f} split",
@@ -1065,6 +1092,7 @@ def _render_share_page(result: dict, created_at: str = "") -> str:
         "{{participants}}": ", ".join(names),
         "{{currency}}": currency,
         "{{total}}": f"{total:,.2f}",
+        "{{me_buttons}}": me_buttons,
         "{{settlements_html}}": settlements_html,
         "{{num_settlements}}": str(n_sett),
         "{{s_plural}}": s_plural,

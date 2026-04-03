@@ -598,7 +598,12 @@ SWAGGER_HTML = """<!DOCTYPE html>
 </html>"""
 
 
-APP_HTML = r"""<!DOCTYPE html>
+# Load JS from file at module init (avoids Python string escaping issues with backticks)
+_APP_JS_PATH = os.path.join(os.path.dirname(__file__), "app.js")
+with open(_APP_JS_PATH, "r") as _f:
+    _APP_JS = _f.read()
+
+_APP_HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -662,12 +667,15 @@ APP_HTML = r"""<!DOCTYPE html>
 <body>
   <div class="container" id="app"></div>
   <script type="module">
-    import { h, render } from 'https://unpkg.com/preact@10/dist/preact.module.js';
-    import { useState } from 'https://unpkg.com/preact@10/hooks/dist/hooks.module.js';
-    import htm from 'https://unpkg.com/htm@3?module';
-    const html = htm.bind(h);
+__APP_JS_PLACEHOLDER__
+  </script>
+</body>
+</html>"""
 
-    function splitSettle(participants, expenses, currency) {
+# Build APP_HTML by injecting the JS file content
+APP_HTML = _APP_HTML_TEMPLATE.replace("__APP_JS_PLACEHOLDER__", _APP_JS)
+
+_DEAD_CODE_REMOVED = """
       if (participants.length < 2 || expenses.length === 0) return null;
       const pSet = new Set(participants);
       const paid = Object.fromEntries(participants.map(p => [p, 0]));
@@ -760,107 +768,104 @@ APP_HTML = r"""<!DOCTYPE html>
         if (navigator.share) navigator.share({ title: 'SplitSettle', text: 'Check our expense split!', url: shareUrl });
       }
 
-      return html\`
+      return html`
         <h1>SplitSettle</h1>
         <div class="subtitle">Split expenses instantly. No registration needed.</div>
 
         <div class="section">
           <div class="section-title">Participants</div>
           <div>
-            $\{names.map(n => html\`<span class="chip" key=$\{n}>${n}<button onClick=$\{()=>removeName(n)}>x</button></span>\`)}
+            ${names.map(n => html`<span class="chip" key=${n}>${n}<button onClick=${()=>removeName(n)}>x</button></span>`)}
           </div>
           <div class="row" style="margin-top:8px">
-            <input placeholder="Add a name..." value=$\{newName} onInput=$\{e=>setNewName(e.target.value)}
-              onKeyDown=$\{e => e.key==='Enter' && addName()} />
-            <button class="btn btn-outline" style="flex:0;padding:10px 16px" onClick=$\{addName}>+</button>
+            <input placeholder="Add a name..." value=${newName} onInput=${e=>setNewName(e.target.value)}
+              onKeyDown=${e => e.key==='Enter' && addName()} />
+            <button class="btn btn-outline" style="flex:0;padding:10px 16px" onClick=${addName}>+</button>
           </div>
         </div>
 
         <div class="section">
           <div class="row">
             <div class="section-title" style="flex:1;margin:0;line-height:28px">Expenses</div>
-            <select style="flex:0;width:80px;text-align:center" value=$\{currency} onChange=$\{e=>changeCurrency(e.target.value)}>
+            <select style="flex:0;width:80px;text-align:center" value=${currency} onChange=${e=>changeCurrency(e.target.value)}>
               <option>TWD</option><option>USD</option><option>JPY</option><option>EUR</option>
               <option>GBP</option><option>CNY</option><option>KRW</option><option>THB</option>
             </select>
           </div>
-          $\{expenses.map((e,i) => html\`
-            <div class="expense-card" key=$\{i}>
+          ${expenses.map((e,i) => html`
+            <div class="expense-card" key=${i}>
               <div>
                 <div class="desc">${e.description || 'Expense'}</div>
-                <div class="meta">${e.paid_by} paid · split $\{e.split_among.length} ways</div>
+                <div class="meta">${e.paid_by} paid · split ${e.split_among.length} ways</div>
               </div>
               <div style="display:flex;align-items:center;gap:12px">
-                <span class="amount">${currency} $\{e.amount.toLocaleString()}</span>
-                <button onClick=$\{()=>removeExpense(i)}>x</button>
+                <span class="amount">${currency} ${e.amount.toLocaleString()}</span>
+                <button onClick=${()=>removeExpense(i)}>x</button>
               </div>
             </div>
-          \`)}
-          $\{showForm ? html\`
+          `)}
+          ${showForm ? html`
             <div class="add-form">
-              <input placeholder="Description (optional)" value=$\{formDesc} onInput=$\{e=>setFormDesc(e.target.value)} style="margin-bottom:8px" />
-              <input placeholder="Amount" inputmode="decimal" value=$\{formAmt} onInput=$\{e=>setFormAmt(e.target.value)} style="margin-bottom:8px" />
-              <select value=$\{formPayer} onChange=$\{e=>setFormPayer(e.target.value)} style="margin-bottom:8px">
-                $\{names.map(n => html\`<option key=$\{n}>${n}</option>\`)}
+              <input placeholder="Description (optional)" value=${formDesc} onInput=${e=>setFormDesc(e.target.value)} style="margin-bottom:8px" />
+              <input placeholder="Amount" inputmode="decimal" value=${formAmt} onInput=${e=>setFormAmt(e.target.value)} style="margin-bottom:8px" />
+              <select value=${formPayer} onChange=${e=>setFormPayer(e.target.value)} style="margin-bottom:8px">
+                ${names.map(n => html`<option key=${n}>${n}</option>`)}
               </select>
               <div class="section-title" style="margin-top:4px">Split among</div>
               <div class="checkbox-group">
-                $\{names.map(n => html\`<label key=$\{n}><input type="checkbox" checked=$\{formSplit.includes(n)} onChange=$\{()=>toggleSplit(n)} />${n}</label>\`)}
+                ${names.map(n => html`<label key=${n}><input type="checkbox" checked=${formSplit.includes(n)} onChange=${()=>toggleSplit(n)} />${n}</label>`)}
               </div>
               <div class="row" style="margin-top:10px">
-                <button class="btn" onClick=$\{addExpense}>Add</button>
-                <button class="btn btn-outline" onClick=$\{()=>setShowForm(false)}>Cancel</button>
+                <button class="btn" onClick=${addExpense}>Add</button>
+                <button class="btn btn-outline" onClick=${()=>setShowForm(false)}>Cancel</button>
               </div>
             </div>
-          \` : html\`<button class="btn btn-outline" onClick=$\{openForm} disabled=$\{names.length<2}>+ Add Expense</button>\`}
+          ` : html`<button class="btn btn-outline" onClick=${openForm} disabled=${names.length<2}>+ Add Expense</button>`}
         </div>
 
-        $\{result && result.settlements.length > 0 ? html\`
+        ${result && result.settlements.length > 0 ? html`
           <hr class="divider" />
           <div class="section">
             <div class="section-title">Settlement</div>
-            $\{result.settlements.map(s => html\`
+            ${result.settlements.map(s => html`
               <div class="result-item">
-                <span class="result-from">$\{s.from}</span> owes
-                <span class="result-to"> $\{s.to}</span>
-                <span class="result-amount">$\{currency} $\{s.amount.toLocaleString()}</span>
+                <span class="result-from">${s.from}</span> owes
+                <span class="result-to"> ${s.to}</span>
+                <span class="result-amount">${currency} ${s.amount.toLocaleString()}</span>
               </div>
-            \`)}
+            `)}
             <div class="summary-line">
-              $\{currency} $\{result.total.toLocaleString()} total · $\{result.settlements.length} transfer$\{result.settlements.length>1?'s':''} to settle <span class="check">✓</span>
+              ${currency} ${result.total.toLocaleString()} total · ${result.settlements.length} transfer${result.settlements.length>1?'s':''} to settle <span class="check">✓</span>
             </div>
-            $\{shareUrl ? html\`
+            ${shareUrl ? html`
               <div class="share-result">
                 <div style="margin-bottom:8px">Link created!</div>
-                <a href=$\{shareUrl}>$\{shareUrl}</a>
+                <a href=${shareUrl}>${shareUrl}</a>
                 <div class="row" style="margin-top:12px">
-                  <button class="btn" onClick=$\{copyLink}>Copy Link</button>
-                  $\{navigator.share ? html\`<button class="btn btn-outline" onClick=$\{webShare}>Share</button>\` : ''}
+                  <button class="btn" onClick=${copyLink}>Copy Link</button>
+                  ${navigator.share ? html`<button class="btn btn-outline" onClick=${webShare}>Share</button>` : ''}
                 </div>
                 <div style="margin-top:8px;font-size:12px;color:#666">Valid for 30 days</div>
               </div>
-            \` : html\`
-              <button class="btn btn-share" onClick=$\{share} disabled=$\{sharing}>
-                $\{sharing ? 'Generating...' : 'Share Results'}
+            ` : html`
+              <button class="btn btn-share" onClick=${share} disabled=${sharing}>
+                ${sharing ? 'Generating...' : 'Share Results'}
               </button>
-            \`}
-            $\{error ? html\`<div class="error">$\{error}</div>\` : ''}
+            `}
+            ${error ? html`<div class="error">${error}</div>` : ''}
           </div>
-        \` : result && result.settlements.length === 0 && expenses.length > 0 ? html\`
+        ` : result && result.settlements.length === 0 && expenses.length > 0 ? html`
           <hr class="divider" />
           <div class="summary-line">Everyone is settled up! <span class="check">✓</span></div>
-        \` : ''}
+        ` : ''}
 
         <div style="text-align:center;margin-top:40px;font-size:11px;color:#444">
           <a href="/docs" style="color:#555">API Docs</a> · Powered by x402
         </div>
-      \`;
+      `;
     }
 
-    render(html\`<$\{App} />\`, document.getElementById('app'));
-  </script>
-</body>
-</html>"""
+"""  # end _DEAD_CODE_REMOVED
 
 NOT_FOUND_HTML = """<!DOCTYPE html>
 <html lang="en">

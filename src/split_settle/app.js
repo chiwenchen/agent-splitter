@@ -214,10 +214,9 @@ function App() {
           </span>
         `)}
       </div>
-      <div class="row" style="margin-top:10px">
+      <div style="margin-top:10px">
         <input placeholder=${t.addName} value=${newName} onInput=${e=>setNewName(e.target.value)}
           onKeyDown=${e=>{if(e.key==='Enter'&&!e.isComposing&&!e.nativeEvent?.isComposing)addName()}} />
-        <button class="btn-outline" style="flex:none;padding:10px 16px;width:auto" onClick=${addName}>+</button>
       </div>
     </div>
 

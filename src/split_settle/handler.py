@@ -612,73 +612,106 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
   <meta name="description" content="Split expenses with friends. No registration, no app download. Share a link and settle up.">
   <style>
     :root {
-      --bg-primary: #141820; --bg-card: #1c2029; --bg-input: #1c2029;
-      --bg-hover: #252a35; --bg-form: #181c24;
-      --border: #2a2f3a; --border-focus: #5b8def;
-      --text-primary: #e8eaf0; --text-secondary: #8b92a0; --text-muted: #555d6e;
-      --accent: #5b8def; --accent-hover: #4a7cde;
-      --green: #34d399; --green-dark: #059669; --green-bg: #0f2a20;
-      --red: #f87171; --red-hover: #ef4444;
+      --bg-primary: #f0fdf9; --bg-card: #fff; --bg-input: #fff;
+      --bg-hover: #e0faf2; --bg-form: #e8fcf5;
+      --border: #b0e0d0; --border-focus: #14b8a6;
+      --text-primary: #0f2f2a; --text-secondary: #3d7068; --text-muted: #8ab5aa;
+      --accent: #14b8a6; --accent-hover: #0d9488;
+      --green: #14b8a6; --green-dark: #0d9488; --green-bg: #e0faf2;
+      --red: #f97066; --red-hover: #e5453a;
+      --result-bg: #f9e1d2; --result-border: #fecdd3;
+      --chip-0-bg: #dbeafe; --chip-0-fg: #2563eb;
+      --chip-1-bg: #fce7f3; --chip-1-fg: #db2777;
+      --chip-2-bg: #fef3c7; --chip-2-fg: #d97706;
+      --tag-blue-bg: #dbeafe; --tag-blue: #2563eb;
+      --tag-amber-bg: #fef3c7; --tag-amber: #b45309;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-           background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; padding: 16px; }
+           background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; padding: 16px;
+           background-image: radial-gradient(circle at 20% 80%,rgba(20,184,166,0.04) 0%,transparent 50%),
+                             radial-gradient(circle at 80% 20%,rgba(249,112,102,0.04) 0%,transparent 50%); }
     .container { max-width: 480px; margin: 0 auto; }
-    .header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-    h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; color: #fff; }
-    .subtitle { font-size: 13px; color: var(--text-secondary); }
+    .header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; }
+    h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 4px;
+         background: linear-gradient(135deg, #0f2f2a, #14b8a6);
+         -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .subtitle { font-size: 14px; color: var(--text-secondary); }
     .lang-btn { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary);
                 border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
-                letter-spacing: 0.5px; }
+                letter-spacing: 0.5px; transition: all 0.15s; }
     .lang-btn:hover { border-color: var(--accent); color: var(--accent); }
-    .section { margin-bottom: 20px; }
-    .section-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;
-                     letter-spacing: 0.5px; margin-bottom: 8px; }
-    .chip { display: inline-flex; align-items: center; background: var(--bg-card); border: 1px solid var(--border);
-            border-radius: 20px; padding: 6px 12px; margin: 0 4px 6px 0; font-size: 14px; }
-    .chip button { background: none; border: none; color: var(--text-muted); cursor: pointer; margin-left: 6px;
+    .section { margin-bottom: 24px; }
+    .section-title { font-size: 12px; font-weight: 700; color: #0d9488; text-transform: uppercase;
+                     letter-spacing: 1px; margin-bottom: 10px; }
+    .chip { display: inline-flex; align-items: center; border-radius: 24px; padding: 7px 14px;
+            margin: 0 4px 6px 0; font-size: 14px; font-weight: 600; transition: transform 0.1s;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+    .chip:hover { transform: scale(1.05); }
+    .chip button { background: none; border: none; cursor: pointer; margin-left: 6px;
                    font-size: 16px; padding: 0 2px; }
-    .chip button:hover { color: var(--red); }
     input, select { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary);
-                    border-radius: 8px; padding: 10px 12px; font-size: 14px; width: 100%; outline: none;
-                    transition: border-color 0.15s; }
-    input:focus, select:focus { border-color: var(--border-focus); }
+                    border-radius: 10px; padding: 10px 12px; font-size: 14px; width: 100%; outline: none;
+                    transition: border-color 0.2s, box-shadow 0.2s; }
+    input:focus, select:focus { border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(20,184,166,0.15); }
     input::placeholder { color: var(--text-muted); }
     .row { display: flex; gap: 8px; margin-bottom: 8px; }
     .row > * { flex: 1; }
-    .btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 10px 16px;
-           font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; transition: background 0.15s; }
+    .btn { background: var(--accent); color: #fff; border: none; border-radius: 10px; padding: 10px 16px;
+           font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; transition: all 0.15s; }
     .btn:hover { background: var(--accent-hover); }
     .btn:disabled { background: var(--bg-card); color: var(--text-muted); cursor: not-allowed; border: 1px solid var(--border); }
-    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 10px; }
     .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
-    .btn-share { background: var(--green); font-size: 16px; padding: 14px; margin-top: 16px; }
-    .btn-share:hover { background: var(--green-dark); }
-    .expense-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 12px;
-                    margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .btn-share { background: linear-gradient(135deg, #14b8a6, #0d9488); font-size: 17px; padding: 16px; margin-top: 16px;
+                 border-radius: 12px; box-shadow: 0 6px 20px rgba(20,184,166,0.35); }
+    .btn-share:hover { box-shadow: 0 8px 25px rgba(20,184,166,0.45); transform: translateY(-1px); }
+    .expense-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+                    margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.04); transition: transform 0.15s, box-shadow 0.15s; }
+    .expense-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
     .expense-card .desc { font-size: 14px; }
-    .expense-card .amount { font-weight: 600; color: var(--accent); }
+    .expense-card .amount { font-weight: 600; color: #0d9488; font-size: 15px; }
     .expense-card .meta { font-size: 12px; color: var(--text-muted); }
     .expense-card button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; }
     .expense-card button:hover { color: var(--red); }
-    .divider { border: none; border-top: 2px solid var(--border); margin: 24px 0 16px; }
-    .result-item { padding: 8px 0; border-bottom: 1px solid var(--bg-card); }
+    .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+    .tag-paid { background: var(--tag-blue-bg); color: var(--tag-blue); }
+    .tag-split { background: var(--tag-amber-bg); color: var(--tag-amber); }
+    .divider { border: none; height: 2px; margin: 28px 0 20px; border-radius: 1px;
+               background: linear-gradient(90deg, transparent, #14b8a6, #f97066, #fbbf24, #14b8a6, transparent); }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .result-item { padding: 12px 16px; margin-bottom: 10px; border-radius: 10px;
+                   background: linear-gradient(135deg, var(--result-bg), #fce8db);
+                   border: 1px solid var(--result-border);
+                   box-shadow: 0 2px 6px rgba(249,112,102,0.08);
+                   animation: slideIn 0.3s ease-out both;
+                   animation-delay: calc(var(--i, 0) * 0.1s);
+                   transition: transform 0.15s, box-shadow 0.15s; }
+    .result-item:hover { transform: translateX(4px); box-shadow: 0 4px 12px rgba(249,112,102,0.15); }
     .result-from { font-weight: 600; color: var(--red); }
-    .result-to { font-weight: 600; color: var(--green); }
-    .result-amount { float: right; font-weight: 600; }
-    .summary-line { text-align: center; color: var(--text-secondary); font-size: 13px; margin-top: 12px; }
-    .check { color: var(--green); }
+    .result-to { font-weight: 600; color: var(--accent); }
+    .result-amount { float: right; font-weight: 800; font-size: 16px; }
+    .summary-line { text-align: center; color: var(--text-secondary); font-size: 13px; margin-top: 16px;
+                    background: #e8fcf5; padding: 10px 16px; border-radius: 10px; font-weight: 500; }
+    .savings { text-align: center; margin-top: 8px; font-size: 12px; color: var(--accent); font-weight: 600; }
+    .check { color: var(--accent); }
     .share-result { text-align: center; margin-top: 16px; padding: 16px; background: var(--green-bg);
-                    border: 1px solid var(--green); border-radius: 8px; }
-    .share-result a { color: var(--green); word-break: break-all; }
+                    border: 1px solid var(--accent); border-radius: 8px; }
+    .share-result a { color: var(--accent); word-break: break-all; }
     .error { color: var(--red); font-size: 13px; margin-top: 8px; text-align: center; }
     .checkbox-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
     .checkbox-group label { display: flex; align-items: center; gap: 4px; font-size: 13px;
                             background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px;
-                            cursor: pointer; }
+                            cursor: pointer; transition: border-color 0.15s; }
     .checkbox-group label:hover { border-color: var(--accent); }
     .checkbox-group input[type=checkbox] { width: auto; accent-color: var(--accent); }
-    .add-form { background: var(--bg-form); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+    .add-form { background: var(--bg-form); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 8px; }
+    @keyframes bounce { 0%,100% { transform: scale(1); } 50% { transform: scale(1.03); } }
+    @keyframes cardIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+    .btn-add-hint { animation: bounce 0.6s ease-in-out 2; border-color: var(--accent) !important; color: var(--accent) !important; }
+    .expense-card-new { animation: cardIn 0.3s ease-out; }
+    button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #14b8a6; outline-offset: 2px; }
   </style>
   <script type="importmap">{"imports":{"preact":"https://esm.sh/preact@10.25.4","preact/hooks":"https://esm.sh/preact@10.25.4/hooks","htm/preact":"https://esm.sh/htm@3.1.1/preact?external=preact"}}</script>
 </head>
@@ -892,16 +925,16 @@ NOT_FOUND_HTML = """<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SplitSettle - Not Found</title>
   <style>
-    body { font-family: -apple-system, system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0;
+    body { font-family: -apple-system, system-ui, sans-serif; background: #f0fdf9; color: #0f2f2a;
            display: flex; justify-content: center; align-items: center; min-height: 100vh; text-align: center; }
-    a { color: #4a9eff; text-decoration: none; }
+    a { color: #14b8a6; text-decoration: none; font-weight: 600; }
     a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
   <div>
-    <h2 style="color:#fff;margin-bottom:8px">Split not found</h2>
-    <p style="color:#888;margin-bottom:24px">This split has expired or doesn't exist.</p>
+    <h2 style="margin-bottom:8px">Split not found</h2>
+    <p style="color:#3d7068;margin-bottom:24px">This split has expired or doesn't exist.</p>
     <a href="/">Create a new split →</a>
   </div>
 </body>
@@ -918,24 +951,37 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
   <meta property="og:type" content="website" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0;
-           min-height: 100vh; padding: 16px; }
+    body { font-family: -apple-system, system-ui, sans-serif; background: #f0fdf9; color: #0f2f2a;
+           min-height: 100vh; padding: 16px;
+           background-image: radial-gradient(circle at 20% 80%,rgba(20,184,166,0.04) 0%,transparent 50%),
+                             radial-gradient(circle at 80% 20%,rgba(249,112,102,0.04) 0%,transparent 50%); }
     .container { max-width: 480px; margin: 0 auto; }
-    h1 { font-size: 20px; color: #fff; margin-bottom: 4px; }
-    .date { font-size: 12px; color: #666; margin-bottom: 20px; }
-    .participants { font-size: 14px; color: #888; margin-bottom: 4px; }
-    .total { font-size: 14px; color: #888; margin-bottom: 20px; }
-    .settlement { padding: 10px 0; border-bottom: 1px solid #1a1a1a; font-size: 15px; }
-    .from { color: #e74c3c; font-weight: 600; }
-    .to { color: #10b981; font-weight: 600; }
-    .amount { float: right; font-weight: 600; }
-    .summary { text-align: center; color: #888; font-size: 13px; margin: 16px 0; }
-    .check { color: #10b981; }
-    .cta { text-align: center; margin-top: 40px; padding: 20px; border-top: 1px solid #1a1a1a; }
-    .cta a { display: inline-block; background: #4a9eff; color: #fff; text-decoration: none;
-             padding: 12px 24px; border-radius: 8px; font-weight: 600; }
-    .cta a:hover { background: #3a8eef; }
-    .cta p { color: #666; font-size: 13px; margin-bottom: 12px; }
+    h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px;
+         background: linear-gradient(135deg, #0f2f2a, #14b8a6);
+         -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .date { font-size: 12px; color: #8ab5aa; margin-bottom: 20px; }
+    .participants { font-size: 14px; color: #3d7068; margin-bottom: 4px; }
+    .total { font-size: 14px; color: #3d7068; margin-bottom: 20px; }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .settlement { padding: 12px 16px; margin-bottom: 10px; border-radius: 10px; font-size: 15px;
+                  background: linear-gradient(135deg, #f9e1d2, #fce8db); border: 1px solid #fecdd3;
+                  box-shadow: 0 2px 6px rgba(249,112,102,0.08);
+                  animation: slideIn 0.3s ease-out both; animation-delay: calc(var(--i,0) * 0.1s); }
+    .from { color: #f97066; font-weight: 600; }
+    .to { color: #14b8a6; font-weight: 600; }
+    .amount { float: right; font-weight: 800; font-size: 16px; }
+    .summary { text-align: center; color: #3d7068; font-size: 13px; margin: 16px 0;
+               background: #e8fcf5; padding: 10px 16px; border-radius: 10px; font-weight: 500; }
+    .check { color: #14b8a6; }
+    .cta { text-align: center; margin-top: 40px; padding: 20px;
+           border-top: 2px solid transparent;
+           background-image: linear-gradient(#f0fdf9,#f0fdf9), linear-gradient(90deg,transparent,#14b8a6,#f97066,#14b8a6,transparent);
+           background-origin: padding-box, border-box; background-clip: padding-box, border-box; }
+    .cta a { display: inline-block; background: linear-gradient(135deg, #14b8a6, #0d9488); color: #fff; text-decoration: none;
+             padding: 12px 24px; border-radius: 10px; font-weight: 600;
+             box-shadow: 0 4px 12px rgba(20,184,166,0.3); }
+    .cta a:hover { box-shadow: 0 6px 20px rgba(20,184,166,0.4); transform: translateY(-1px); }
+    .cta p { color: #8ab5aa; font-size: 13px; margin-bottom: 12px; }
   </style>
 </head>
 <body>

@@ -4,99 +4,51 @@ import { html } from 'htm/preact';
 
 const i18n = {
   en: {
-    title: 'SplitSettle',
-    subtitle: 'Split expenses instantly. No registration needed.',
-    participants: 'Participants',
-    addName: 'Add a name...',
-    expenses: 'Expenses',
-    addExpense: '+ Add Expense',
-    description: 'Description (optional)',
-    amount: 'Amount',
-    paidBy: 'Paid by',
-    splitAmong: 'Split among',
-    add: 'Add',
-    cancel: 'Cancel',
-    settlement: 'Settlement',
-    owes: 'owes',
-    total: 'total',
-    transfer: 'transfer',
-    transfers: 'transfers',
-    toSettle: 'to settle',
-    shareResults: 'Share Results',
-    generating: 'Generating...',
-    linkCreated: 'Link created!',
-    copyLink: 'Copy Link',
-    share: 'Share',
-    validFor: 'Valid for 30 days',
-    allSettled: 'Everyone is settled up!',
-    expense: 'Expense',
-    paid: 'paid',
-    splitWays: 'ways',
-    lang: 'EN',
+    title: 'SplitSettle', subtitle: 'Split expenses instantly. No registration needed.',
+    participants: 'Participants', addName: 'Add a name...', expenses: 'Expenses',
+    addExpense: '+ Add Expense', description: 'Description (optional)', amount: 'Amount',
+    paidBy: 'Paid by', splitAmong: 'Split among', add: 'Add', cancel: 'Cancel',
+    settlement: 'Settlement', owes: 'owes', total: 'total',
+    transfer: 'transfer', transfers: 'transfers', toSettle: 'to settle',
+    shareResults: 'Share Results', generating: 'Generating...',
+    linkCreated: 'Link created!', copyLink: 'Copy Link', share: 'Share',
+    validFor: 'Valid for 30 days', allSettled: 'Everyone is settled up!',
+    expense: 'Expense', paid: 'paid', splitWays: 'ways', lang: 'EN',
+    saved: 'unnecessary transfers saved!',
   },
   'zh-TW': {
-    title: 'SplitSettle',
-    subtitle: '秒算分帳，免註冊、免下載',
-    participants: '參加者',
-    addName: '輸入名字...',
-    expenses: '帳單',
-    addExpense: '+ 新增帳單',
-    description: '說明（選填）',
-    amount: '金額',
-    paidBy: '誰付的',
-    splitAmong: '分給誰',
-    add: '新增',
-    cancel: '取消',
-    settlement: '結算',
-    owes: '要付給',
-    total: '總計',
-    transfer: '筆轉帳',
-    transfers: '筆轉帳',
-    toSettle: '即可結清',
-    shareResults: '分享結果',
-    generating: '產生中...',
-    linkCreated: '連結已產生！',
-    copyLink: '複製連結',
-    share: '分享',
-    validFor: '30 天內有效',
-    allSettled: '全部結清！不用轉帳',
-    expense: '消費',
-    paid: '付了',
-    splitWays: '人分',
-    lang: '中',
+    title: 'SplitSettle', subtitle: '秒算分帳，免註冊、免下載',
+    participants: '參加者', addName: '輸入名字...', expenses: '帳單',
+    addExpense: '+ 新增帳單', description: '說明（選填）', amount: '金額',
+    paidBy: '誰付的', splitAmong: '分給誰', add: '新增', cancel: '取消',
+    settlement: '結算', owes: '要付給', total: '總計',
+    transfer: '筆轉帳', transfers: '筆轉帳', toSettle: '即可結清',
+    shareResults: '分享結果', generating: '產生中...',
+    linkCreated: '連結已產生！', copyLink: '複製連結', share: '分享',
+    validFor: '30 天內有效', allSettled: '全部結清！不用轉帳',
+    expense: '消費', paid: '墊付', splitWays: '人分', lang: '中',
+    saved: '筆不必要的轉帳已省下！',
   },
   ja: {
-    title: 'SplitSettle',
-    subtitle: '割り勘を即計算。登録不要。',
-    participants: '参加者',
-    addName: '名前を入力...',
-    expenses: '支出',
-    addExpense: '+ 支出を追加',
-    description: '説明（任意）',
-    amount: '金額',
-    paidBy: '支払った人',
-    splitAmong: '割り勘メンバー',
-    add: '追加',
-    cancel: 'キャンセル',
-    settlement: '精算',
-    owes: '→',
-    total: '合計',
-    transfer: '件の送金',
-    transfers: '件の送金',
-    toSettle: 'で精算完了',
-    shareResults: '結果をシェア',
-    generating: '生成中...',
-    linkCreated: 'リンクを作成しました！',
-    copyLink: 'リンクをコピー',
-    share: 'シェア',
-    validFor: '30日間有効',
-    allSettled: '全員精算済み！',
-    expense: '支出',
-    paid: 'が支払い',
-    splitWays: '人で割り勘',
-    lang: 'JA',
+    title: 'SplitSettle', subtitle: '割り勘を即計算。登録不要。',
+    participants: '参加者', addName: '名前を入力...', expenses: '支出',
+    addExpense: '+ 支出を追加', description: '説明（任意）', amount: '金額',
+    paidBy: '支払った人', splitAmong: '割り勘メンバー', add: '追加', cancel: 'キャンセル',
+    settlement: '精算', owes: '→', total: '合計',
+    transfer: '件の送金', transfers: '件の送金', toSettle: 'で精算完了',
+    shareResults: '結果をシェア', generating: '生成中...',
+    linkCreated: 'リンクを作成しました！', copyLink: 'リンクをコピー', share: 'シェア',
+    validFor: '30日間有効', allSettled: '全員精算済み！',
+    expense: '支出', paid: 'が支払い', splitWays: '人で割り勘', lang: 'JA',
+    saved: '件の不要な送金を節約！',
   },
 };
+
+const chipColors = [
+  ['var(--chip-0-bg)','var(--chip-0-fg)'],
+  ['var(--chip-1-bg)','var(--chip-1-fg)'],
+  ['var(--chip-2-bg)','var(--chip-2-fg)'],
+];
 
 function detectLang() {
   const saved = localStorage.getItem('ss_lang');
@@ -134,7 +86,10 @@ function splitSettle(participants, expenses, currency) {
     if (creds[i][0] === 0) i++;
     if (debts[j][0] === 0) j++;
   }
-  return { currency, total: total/100, settlements,
+  // Max possible = N-1 pairs, actual = settlements.length
+  const maxTransfers = participants.length - 1;
+  const saved = maxTransfers - settlements.length;
+  return { currency, total: total/100, settlements, saved,
            summary: participants.map(p => ({ name: p, paid: paid[p]/100, owed: owed[p]/100, balance: bal[p]/100 })) };
 }
 
@@ -154,6 +109,8 @@ function App() {
   const [shareUrl, setShareUrl] = useState('');
   const [sharing, setSharing] = useState(false);
   const [error, setError] = useState('');
+  const [addHint, setAddHint] = useState(false);
+  const [firstExpenseHint, setFirstExpenseHint] = useState(true);
   const t = i18n[lang];
   const names = participants.filter(p => p.trim());
   const result = splitSettle(names, expenses, currency);
@@ -182,6 +139,8 @@ function App() {
     if (!amt || amt <= 0 || !formPayer || formSplit.length === 0) return;
     setE([...expenses, { description: formDesc || '', paid_by: formPayer, amount: amt, split_among: [...formSplit] }]);
     setShowForm(false);
+    setAddHint(true);
+    setTimeout(() => setAddHint(false), 1500);
   }
   function removeExpense(i) { setE(expenses.filter((_,idx) => idx !== i)); setShareUrl(''); }
   function changeCurrency(c) { setCurrency(c); localStorage.setItem('ss_currency', c); }
@@ -224,11 +183,14 @@ function App() {
     <div class="section">
       <div class="section-title">${t.participants}</div>
       <div>
-        ${names.map(n => html`<span class="chip" key=${n}>${n}<button onClick=${()=>removeName(n)}>x</button></span>`)}
+        ${names.map((n, i) => {
+          const [bg, fg] = chipColors[i % chipColors.length];
+          return html`<span class="chip" key=${n} style="background:${bg};border-color:${bg};color:${fg}">${n}<button style="color:${fg}" onClick=${()=>removeName(n)}>x</button></span>`;
+        })}
       </div>
       <div class="row" style="margin-top:8px">
         <input placeholder=${t.addName} value=${newName} onInput=${e=>setNewName(e.target.value)}
-          onKeyDown=${e => e.key==='Enter' && addName()} />
+          onKeyDown=${e => { if (e.key==='Enter' && !e.isComposing && !e.nativeEvent?.isComposing) addName(); }} />
         <button class="btn btn-outline" style="flex:0;padding:10px 16px" onClick=${addName}>+</button>
       </div>
     </div>
@@ -242,10 +204,10 @@ function App() {
         </select>
       </div>
       ${expenses.map((e,i) => html`
-        <div class="expense-card" key=${i}>
+        <div class="expense-card ${i === expenses.length - 1 ? 'expense-card-new' : ''}" key=${i}>
           <div>
             <div class="desc">${e.description || t.expense}</div>
-            <div class="meta">${e.paid_by} ${t.paid} · ${e.split_among.length} ${t.splitWays}</div>
+            <div class="meta"><span class="tag tag-paid">${e.paid_by} ${t.paid}</span> <span class="tag tag-split">${e.split_among.length} ${t.splitWays}</span></div>
           </div>
           <div style="display:flex;align-items:center;gap:12px">
             <span class="amount">${currency} ${e.amount.toLocaleString()}</span>
@@ -269,15 +231,15 @@ function App() {
             <button class="btn btn-outline" onClick=${()=>setShowForm(false)}>${t.cancel}</button>
           </div>
         </div>
-      ` : html`<button class="btn btn-outline" onClick=${openForm} disabled=${names.length<2}>${t.addExpense}</button>`}
+      ` : html`<button class="btn btn-outline ${(addHint || (firstExpenseHint && names.length >= 2 && expenses.length === 0)) ? 'btn-add-hint' : ''}" onClick=${() => { setFirstExpenseHint(false); openForm(); }} disabled=${names.length<2}>${t.addExpense}</button>`}
     </div>
 
     ${result && nSett > 0 ? html`
       <hr class="divider" />
       <div class="section">
         <div class="section-title">${t.settlement}</div>
-        ${result.settlements.map(s => html`
-          <div class="result-item">
+        ${result.settlements.map((s, idx) => html`
+          <div class="result-item" key="${s.from}-${s.to}-${s.amount}-${expenses.length}" style="--i:${idx}">
             <span class="result-from">${s.from}</span> ${t.owes}
             <span class="result-to"> ${s.to}</span>
             <span class="result-amount">${currency} ${s.amount.toLocaleString()}</span>
@@ -286,6 +248,7 @@ function App() {
         <div class="summary-line">
           ${currency} ${result.total.toLocaleString()} ${t.total} · ${nSett} ${nSett>1?t.transfers:t.transfer} ${t.toSettle} <span class="check">✓</span>
         </div>
+        ${result.saved > 0 ? html`<div class="savings">💡 ${result.saved} ${t.saved}</div>` : ''}
         ${shareUrl ? html`
           <div class="share-result">
             <div style="margin-bottom:8px">${t.linkCreated}</div>

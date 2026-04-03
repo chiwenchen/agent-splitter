@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import time
 import urllib.request
 
@@ -134,7 +135,7 @@ def _create_group(group_id: str, participants: list) -> dict:
         wallet = p.get("wallet_address", "")
         if not name:
             raise ValueError("each participant must have a name")
-        if not _validate_checksum_address(wallet):
+        if wallet and not _validate_checksum_address(wallet):
             raise ValueError(f"invalid wallet address for {name}")
 
     client = boto3.client("dynamodb", region_name="ap-northeast-1")
@@ -151,15 +152,14 @@ def _create_group(group_id: str, participants: list) -> dict:
         raise GroupExistsError(f"group '{group_id}' already exists")
 
     for p in participants:
-        client.put_item(
-            TableName=table,
-            Item={
-                "PK": {"S": f"GROUP#{group_id}"},
-                "SK": {"S": f"PARTICIPANT#{p['name']}"},
-                "wallet_address": {"S": p["wallet_address"]},
-                "created_at": {"S": created_at},
-            },
-        )
+        item = {
+            "PK": {"S": f"GROUP#{group_id}"},
+            "SK": {"S": f"PARTICIPANT#{p['name']}"},
+            "created_at": {"S": created_at},
+        }
+        if p.get("wallet_address"):
+            item["wallet_address"] = {"S": p["wallet_address"]}
+        client.put_item(TableName=table, Item=item)
 
     return {"group_id": group_id, "participants": len(participants), "created_at": created_at}
 
@@ -190,8 +190,56 @@ def _get_group_participants(group_id: str) -> dict:
     for item in items:
         sk = item["SK"]["S"]
         name = sk.replace("PARTICIPANT#", "", 1)
-        result[name] = item["wallet_address"]["S"]
+        result[name] = item.get("wallet_address", {}).get("S", "")
     return result
+
+
+def _generate_share_id() -> str:
+    """Generate an 8-char URL-safe share ID."""
+    return secrets.token_urlsafe(6)[:8]
+
+
+def _save_share(share_id: str, request_body: dict, result: dict) -> None:
+    """Save a shared split result to DynamoDB."""
+    import boto3
+    table = os.environ.get("GROUPS_TABLE", "")
+    if not table:
+        raise ValueError("GROUPS_TABLE not configured")
+    client = boto3.client("dynamodb", region_name="ap-northeast-1")
+    ttl = int(time.time()) + 86400 * 30  # 30 days
+    client.put_item(
+        TableName=table,
+        Item={
+            "PK": {"S": f"SHARE#{share_id}"},
+            "SK": {"S": "RESULT"},
+            "request_body": {"S": json.dumps(request_body)},
+            "result": {"S": json.dumps(result)},
+            "created_at": {"S": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
+            "ttl_expiry": {"N": str(ttl)},
+        },
+    )
+
+
+def _get_share(share_id: str) -> dict:
+    """Get a shared split result from DynamoDB. Returns dict or None."""
+    import boto3
+    table = os.environ.get("GROUPS_TABLE", "")
+    if not table:
+        return None
+    client = boto3.client("dynamodb", region_name="ap-northeast-1")
+    response = client.get_item(
+        TableName=table,
+        Key={"PK": {"S": f"SHARE#{share_id}"}, "SK": {"S": "RESULT"}},
+    )
+    item = response.get("Item")
+    if not item:
+        return None
+    return {
+        "request_body": json.loads(item["request_body"]["S"]),
+        "result": json.loads(item["result"]["S"]),
+        "created_at": item["created_at"]["S"],
+        "ttl_expiry": int(item["ttl_expiry"]["N"]),
+    }
 
 
 def _verify_payment(tx_hash: str, network: str) -> tuple:
@@ -550,6 +598,378 @@ SWAGGER_HTML = """<!DOCTYPE html>
 </html>"""
 
 
+APP_HTML = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SplitSettle - Split Bills Instantly</title>
+  <meta name="description" content="Split expenses with friends. No registration, no app download. Share a link and settle up.">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+           background: #0a0a0a; color: #e0e0e0; min-height: 100vh; padding: 16px; }
+    .container { max-width: 480px; margin: 0 auto; }
+    h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; color: #fff; }
+    .subtitle { font-size: 13px; color: #888; margin-bottom: 24px; }
+    .section { margin-bottom: 20px; }
+    .section-title { font-size: 13px; font-weight: 600; color: #999; text-transform: uppercase;
+                     letter-spacing: 0.5px; margin-bottom: 8px; }
+    .chip { display: inline-flex; align-items: center; background: #1a1a1a; border: 1px solid #333;
+            border-radius: 20px; padding: 6px 12px; margin: 0 4px 6px 0; font-size: 14px; }
+    .chip button { background: none; border: none; color: #666; cursor: pointer; margin-left: 6px;
+                   font-size: 16px; padding: 0 2px; }
+    .chip button:hover { color: #e74c3c; }
+    input, select { background: #1a1a1a; border: 1px solid #333; color: #e0e0e0; border-radius: 8px;
+                    padding: 10px 12px; font-size: 14px; width: 100%; outline: none; }
+    input:focus, select:focus { border-color: #4a9eff; }
+    input::placeholder { color: #555; }
+    .row { display: flex; gap: 8px; margin-bottom: 8px; }
+    .row > * { flex: 1; }
+    .btn { background: #4a9eff; color: #fff; border: none; border-radius: 8px; padding: 10px 16px;
+           font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; }
+    .btn:hover { background: #3a8eef; }
+    .btn:disabled { background: #333; color: #666; cursor: not-allowed; }
+    .btn-outline { background: transparent; border: 1px solid #333; color: #999; }
+    .btn-outline:hover { border-color: #4a9eff; color: #4a9eff; }
+    .btn-share { background: #10b981; font-size: 16px; padding: 14px; margin-top: 16px; }
+    .btn-share:hover { background: #0d9668; }
+    .expense-card { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 12px;
+                    margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+    .expense-card .desc { font-size: 14px; }
+    .expense-card .amount { font-weight: 600; color: #4a9eff; }
+    .expense-card .meta { font-size: 12px; color: #666; }
+    .expense-card button { background: none; border: none; color: #444; cursor: pointer; font-size: 18px; }
+    .expense-card button:hover { color: #e74c3c; }
+    .divider { border: none; border-top: 2px solid #222; margin: 24px 0 16px; }
+    .result-item { padding: 8px 0; border-bottom: 1px solid #1a1a1a; }
+    .result-from { font-weight: 600; color: #e74c3c; }
+    .result-to { font-weight: 600; color: #10b981; }
+    .result-amount { float: right; font-weight: 600; }
+    .summary-line { text-align: center; color: #888; font-size: 13px; margin-top: 12px; }
+    .check { color: #10b981; }
+    .share-result { text-align: center; margin-top: 16px; padding: 16px; background: #1a2a1a;
+                    border: 1px solid #10b981; border-radius: 8px; }
+    .share-result a { color: #10b981; word-break: break-all; }
+    .error { color: #e74c3c; font-size: 13px; margin-top: 8px; text-align: center; }
+    .checkbox-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .checkbox-group label { display: flex; align-items: center; gap: 4px; font-size: 13px;
+                            background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 4px 10px; }
+    .checkbox-group input[type=checkbox] { width: auto; }
+    .add-form { background: #111; border: 1px solid #222; border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container" id="app"></div>
+  <script type="module">
+    import { h, render } from 'https://unpkg.com/preact@10/dist/preact.module.js';
+    import { useState } from 'https://unpkg.com/preact@10/hooks/dist/hooks.module.js';
+    import htm from 'https://unpkg.com/htm@3?module';
+    const html = htm.bind(h);
+
+    function splitSettle(participants, expenses, currency) {
+      if (participants.length < 2 || expenses.length === 0) return null;
+      const pSet = new Set(participants);
+      const paid = Object.fromEntries(participants.map(p => [p, 0]));
+      const owed = Object.fromEntries(participants.map(p => [p, 0]));
+      let total = 0;
+      for (const e of expenses) {
+        if (!pSet.has(e.paid_by) || e.amount <= 0 || e.split_among.length === 0) continue;
+        const cents = Math.round(e.amount * 100);
+        total += cents;
+        paid[e.paid_by] += cents;
+        const share = Math.floor(cents / e.split_among.length);
+        const rem = cents % e.split_among.length;
+        e.split_among.forEach((p, i) => { if (pSet.has(p)) owed[p] += share + (i < rem ? 1 : 0); });
+      }
+      const bal = Object.fromEntries(participants.map(p => [p, paid[p] - owed[p]]));
+      const creds = participants.filter(p => bal[p] > 0).map(p => [bal[p], p]).sort((a,b) => b[0]-a[0]);
+      const debts = participants.filter(p => bal[p] < 0).map(p => [-bal[p], p]).sort((a,b) => b[0]-a[0]);
+      const settlements = [];
+      let i = 0, j = 0;
+      while (i < creds.length && j < debts.length) {
+        const t = Math.min(creds[i][0], debts[j][0]);
+        settlements.push({ from: debts[j][1], to: creds[i][1], amount: t / 100 });
+        creds[i][0] -= t; debts[j][0] -= t;
+        if (creds[i][0] === 0) i++;
+        if (debts[j][0] === 0) j++;
+      }
+      return { currency, total: total/100, settlements,
+               summary: participants.map(p => ({ name: p, paid: paid[p]/100, owed: owed[p]/100, balance: bal[p]/100 })) };
+    }
+
+    function App() {
+      const [participants, setP] = useState(['']);
+      const [expenses, setE] = useState([]);
+      const [currency, setCurrency] = useState(localStorage.getItem('ss_currency') || 'TWD');
+      const [newName, setNewName] = useState('');
+      const [showForm, setShowForm] = useState(false);
+      const [formDesc, setFormDesc] = useState('');
+      const [formAmt, setFormAmt] = useState('');
+      const [formPayer, setFormPayer] = useState('');
+      const [formSplit, setFormSplit] = useState([]);
+      const [shareUrl, setShareUrl] = useState('');
+      const [sharing, setSharing] = useState(false);
+      const [error, setError] = useState('');
+      const names = participants.filter(p => p.trim());
+      const result = splitSettle(names, expenses, currency);
+
+      function addName() {
+        if (!newName.trim() || names.includes(newName.trim())) return;
+        setP([...participants.filter(p=>p.trim()), newName.trim(), '']);
+        setNewName('');
+      }
+      function removeName(n) {
+        setP(participants.filter(p => p !== n));
+        setE(expenses.filter(e => e.paid_by !== n && !e.split_among.includes(n)));
+      }
+      function openForm() {
+        setFormDesc(''); setFormAmt(''); setFormPayer(names[0] || '');
+        setFormSplit([...names]); setShowForm(true);
+      }
+      function addExpense() {
+        const amt = parseFloat(formAmt);
+        if (!amt || amt <= 0 || !formPayer || formSplit.length === 0) return;
+        setE([...expenses, { description: formDesc || '', paid_by: formPayer, amount: amt, split_among: [...formSplit] }]);
+        setShowForm(false);
+      }
+      function removeExpense(i) { setE(expenses.filter((_,idx) => idx !== i)); setShareUrl(''); }
+      function changeCurrency(c) { setCurrency(c); localStorage.setItem('ss_currency', c); }
+      function toggleSplit(name) {
+        setFormSplit(formSplit.includes(name) ? formSplit.filter(n=>n!==name) : [...formSplit, name]);
+      }
+
+      async function share() {
+        if (!result || result.settlements.length === 0) return;
+        setSharing(true); setError(''); setShareUrl('');
+        try {
+          const body = { currency, participants: names,
+            expenses: expenses.map(e => ({ description: e.description, paid_by: e.paid_by,
+              amount: e.amount, split_among: e.split_among })) };
+          const res = await fetch('/v1/share', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+          if (!res.ok) { const d = await res.json().catch(()=>({})); throw new Error(d.error || 'Failed'); }
+          const data = await res.json();
+          setShareUrl(window.location.origin + data.url);
+        } catch (e) { setError(e.message); }
+        setSharing(false);
+      }
+      async function copyLink() {
+        try { await navigator.clipboard.writeText(shareUrl); } catch(e) {}
+      }
+      function webShare() {
+        if (navigator.share) navigator.share({ title: 'SplitSettle', text: 'Check our expense split!', url: shareUrl });
+      }
+
+      return html\`
+        <h1>SplitSettle</h1>
+        <div class="subtitle">Split expenses instantly. No registration needed.</div>
+
+        <div class="section">
+          <div class="section-title">Participants</div>
+          <div>
+            $\{names.map(n => html\`<span class="chip" key=$\{n}>${n}<button onClick=$\{()=>removeName(n)}>x</button></span>\`)}
+          </div>
+          <div class="row" style="margin-top:8px">
+            <input placeholder="Add a name..." value=$\{newName} onInput=$\{e=>setNewName(e.target.value)}
+              onKeyDown=$\{e => e.key==='Enter' && addName()} />
+            <button class="btn btn-outline" style="flex:0;padding:10px 16px" onClick=$\{addName}>+</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="row">
+            <div class="section-title" style="flex:1;margin:0;line-height:28px">Expenses</div>
+            <select style="flex:0;width:80px;text-align:center" value=$\{currency} onChange=$\{e=>changeCurrency(e.target.value)}>
+              <option>TWD</option><option>USD</option><option>JPY</option><option>EUR</option>
+              <option>GBP</option><option>CNY</option><option>KRW</option><option>THB</option>
+            </select>
+          </div>
+          $\{expenses.map((e,i) => html\`
+            <div class="expense-card" key=$\{i}>
+              <div>
+                <div class="desc">${e.description || 'Expense'}</div>
+                <div class="meta">${e.paid_by} paid · split $\{e.split_among.length} ways</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px">
+                <span class="amount">${currency} $\{e.amount.toLocaleString()}</span>
+                <button onClick=$\{()=>removeExpense(i)}>x</button>
+              </div>
+            </div>
+          \`)}
+          $\{showForm ? html\`
+            <div class="add-form">
+              <input placeholder="Description (optional)" value=$\{formDesc} onInput=$\{e=>setFormDesc(e.target.value)} style="margin-bottom:8px" />
+              <input placeholder="Amount" inputmode="decimal" value=$\{formAmt} onInput=$\{e=>setFormAmt(e.target.value)} style="margin-bottom:8px" />
+              <select value=$\{formPayer} onChange=$\{e=>setFormPayer(e.target.value)} style="margin-bottom:8px">
+                $\{names.map(n => html\`<option key=$\{n}>${n}</option>\`)}
+              </select>
+              <div class="section-title" style="margin-top:4px">Split among</div>
+              <div class="checkbox-group">
+                $\{names.map(n => html\`<label key=$\{n}><input type="checkbox" checked=$\{formSplit.includes(n)} onChange=$\{()=>toggleSplit(n)} />${n}</label>\`)}
+              </div>
+              <div class="row" style="margin-top:10px">
+                <button class="btn" onClick=$\{addExpense}>Add</button>
+                <button class="btn btn-outline" onClick=$\{()=>setShowForm(false)}>Cancel</button>
+              </div>
+            </div>
+          \` : html\`<button class="btn btn-outline" onClick=$\{openForm} disabled=$\{names.length<2}>+ Add Expense</button>\`}
+        </div>
+
+        $\{result && result.settlements.length > 0 ? html\`
+          <hr class="divider" />
+          <div class="section">
+            <div class="section-title">Settlement</div>
+            $\{result.settlements.map(s => html\`
+              <div class="result-item">
+                <span class="result-from">$\{s.from}</span> owes
+                <span class="result-to"> $\{s.to}</span>
+                <span class="result-amount">$\{currency} $\{s.amount.toLocaleString()}</span>
+              </div>
+            \`)}
+            <div class="summary-line">
+              $\{currency} $\{result.total.toLocaleString()} total · $\{result.settlements.length} transfer$\{result.settlements.length>1?'s':''} to settle <span class="check">✓</span>
+            </div>
+            $\{shareUrl ? html\`
+              <div class="share-result">
+                <div style="margin-bottom:8px">Link created!</div>
+                <a href=$\{shareUrl}>$\{shareUrl}</a>
+                <div class="row" style="margin-top:12px">
+                  <button class="btn" onClick=$\{copyLink}>Copy Link</button>
+                  $\{navigator.share ? html\`<button class="btn btn-outline" onClick=$\{webShare}>Share</button>\` : ''}
+                </div>
+                <div style="margin-top:8px;font-size:12px;color:#666">Valid for 30 days</div>
+              </div>
+            \` : html\`
+              <button class="btn btn-share" onClick=$\{share} disabled=$\{sharing}>
+                $\{sharing ? 'Generating...' : 'Share Results'}
+              </button>
+            \`}
+            $\{error ? html\`<div class="error">$\{error}</div>\` : ''}
+          </div>
+        \` : result && result.settlements.length === 0 && expenses.length > 0 ? html\`
+          <hr class="divider" />
+          <div class="summary-line">Everyone is settled up! <span class="check">✓</span></div>
+        \` : ''}
+
+        <div style="text-align:center;margin-top:40px;font-size:11px;color:#444">
+          <a href="/docs" style="color:#555">API Docs</a> · Powered by x402
+        </div>
+      \`;
+    }
+
+    render(html\`<$\{App} />\`, document.getElementById('app'));
+  </script>
+</body>
+</html>"""
+
+NOT_FOUND_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SplitSettle - Not Found</title>
+  <style>
+    body { font-family: -apple-system, system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0;
+           display: flex; justify-content: center; align-items: center; min-height: 100vh; text-align: center; }
+    a { color: #4a9eff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div>
+    <h2 style="color:#fff;margin-bottom:8px">Split not found</h2>
+    <p style="color:#888;margin-bottom:24px">This split has expired or doesn't exist.</p>
+    <a href="/">Create a new split →</a>
+  </div>
+</body>
+</html>"""
+
+SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SplitSettle - {{title}}</title>
+  <meta property="og:title" content="{{og_title}}" />
+  <meta property="og:description" content="{{og_desc}}" />
+  <meta property="og:type" content="website" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0;
+           min-height: 100vh; padding: 16px; }
+    .container { max-width: 480px; margin: 0 auto; }
+    h1 { font-size: 20px; color: #fff; margin-bottom: 4px; }
+    .date { font-size: 12px; color: #666; margin-bottom: 20px; }
+    .participants { font-size: 14px; color: #888; margin-bottom: 4px; }
+    .total { font-size: 14px; color: #888; margin-bottom: 20px; }
+    .settlement { padding: 10px 0; border-bottom: 1px solid #1a1a1a; font-size: 15px; }
+    .from { color: #e74c3c; font-weight: 600; }
+    .to { color: #10b981; font-weight: 600; }
+    .amount { float: right; font-weight: 600; }
+    .summary { text-align: center; color: #888; font-size: 13px; margin: 16px 0; }
+    .check { color: #10b981; }
+    .cta { text-align: center; margin-top: 40px; padding: 20px; border-top: 1px solid #1a1a1a; }
+    .cta a { display: inline-block; background: #4a9eff; color: #fff; text-decoration: none;
+             padding: 12px 24px; border-radius: 8px; font-weight: 600; }
+    .cta a:hover { background: #3a8eef; }
+    .cta p { color: #666; font-size: 13px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>SplitSettle</h1>
+    <div class="date">{{date}}</div>
+    <div class="participants">{{participants}}</div>
+    <div class="total">Total: {{currency}} {{total}}</div>
+    {{settlements_html}}
+    <div class="summary">{{num_settlements}} transfer{{s_plural}} to settle <span class="check">✓</span></div>
+    <div class="cta">
+      <p>Need to split a bill?</p>
+      <a href="/">Start splitting →</a>
+    </div>
+  </div>
+</body>
+</html>"""
+
+
+def _render_share_page(result: dict, created_at: str = "") -> str:
+    """Render the share page HTML from a split result."""
+    currency = result.get("currency", "")
+    total = result.get("total_expenses", 0)
+    settlements = result.get("settlements", [])
+    summary = result.get("summary", [])
+    names = [s["participant"] for s in summary]
+    n_sett = len(settlements)
+
+    settlements_html = ""
+    for s in settlements:
+        settlements_html += (
+            f'<div class="settlement">'
+            f'<span class="from">{s["from"]}</span> owes '
+            f'<span class="to">{s["to"]}</span>'
+            f'<span class="amount">{currency} {s["amount"]:,.2f}</span>'
+            f'</div>'
+        )
+
+    s_plural = "s" if n_sett != 1 else ""
+    replacements = {
+        "{{title}}": f"{currency} {total:,.0f} split",
+        "{{og_title}}": f"Split: {currency} {total:,.0f} between {len(names)} people",
+        "{{og_desc}}": f"{n_sett} transfer{s_plural} needed to settle",
+        "{{date}}": created_at[:10] if created_at else "",
+        "{{participants}}": ", ".join(names),
+        "{{currency}}": currency,
+        "{{total}}": f"{total:,.2f}",
+        "{{settlements_html}}": settlements_html,
+        "{{num_settlements}}": str(n_sett),
+        "{{s_plural}}": s_plural,
+    }
+    html = SHARE_PAGE_TEMPLATE
+    for key, value in replacements.items():
+        html = html.replace(key, value)
+    return html
+
+
 _METHOD_NOT_ALLOWED = {
     "statusCode": 405,
     "headers": {"Content-Type": "application/json"},
@@ -560,6 +980,8 @@ _ROUTE_METHODS = {
     "/openapi.json": "GET",
     "/health": "GET",
     "/docs": "GET",
+    "/": "GET",
+    "/v1/share": "POST",
     "/v1/split_settle": "POST",
     "/v1/groups": "POST",
 }
@@ -593,6 +1015,19 @@ def lambda_handler(event, context):
             "headers": {"Content-Type": "text/html"},
             "body": SWAGGER_HTML,
         }
+
+    if path == "/":
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": APP_HTML,
+        }
+
+    if path.startswith("/s/"):
+        return _handle_share_page(event)
+
+    if path == "/v1/share":
+        return _handle_share(event)
 
     if path == "/v1/groups":
         return _handle_groups(event)
@@ -642,6 +1077,48 @@ def _handle_groups(event):
             "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"error": "Internal server error"}),
         }
+
+
+def _handle_share(event):
+    """POST /v1/share — public endpoint, saves split result, returns share link."""
+    try:
+        body = json.loads(event.get("body") or "{}")
+        result = split_settle(body)
+        share_id = _generate_share_id()
+        _save_share(share_id, body, result)
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"share_id": share_id, "url": f"/s/{share_id}"}),
+        }
+    except ValueError as e:
+        return {
+            "statusCode": 400,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": str(e)}),
+        }
+    except Exception:
+        logger.exception("Unhandled error in _handle_share")
+        return {
+            "statusCode": 500,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "Internal server error"}),
+        }
+
+
+def _handle_share_page(event):
+    """GET /s/{id} — render shared result page."""
+    path = event.get("rawPath", "")
+    share_id = path.split("/s/", 1)[-1] if "/s/" in path else ""
+    if not share_id:
+        return {"statusCode": 404, "headers": {"Content-Type": "text/html"}, "body": NOT_FOUND_HTML}
+
+    data = _get_share(share_id)
+    if not data or data["ttl_expiry"] < time.time():
+        return {"statusCode": 404, "headers": {"Content-Type": "text/html"}, "body": NOT_FOUND_HTML}
+
+    html = _render_share_page(data["result"], data["created_at"])
+    return {"statusCode": 200, "headers": {"Content-Type": "text/html"}, "body": html}
 
 
 def _handle_split_settle(event):
@@ -788,28 +1265,31 @@ def split_settle(data: dict) -> dict:
                         f"participant '{name}' in expenses not found in group"
                     )
 
-        transfers = []
-        for s in settlements:
-            from_wallet = wallet_map[s["from"]]
-            to_wallet = wallet_map[s["to"]]
-            # Convert settlement amount to USDC wei (6 decimals)
-            amount_wei = round(s["amount"] / 100 * 1_000_000)
-            transfers.append({
-                "from_wallet": from_wallet,
-                "to_wallet": to_wallet,
-                "amount_wei": str(amount_wei),
-                "calldata": _encode_transfer_calldata(to_wallet, amount_wei),
-            })
+        # Only add execution block if ALL participants have wallets
+        all_have_wallets = all(wallet_map.get(s[role]) for s in settlements for role in ("from", "to"))
+        if all_have_wallets:
+            transfers = []
+            for s in settlements:
+                from_wallet = wallet_map[s["from"]]
+                to_wallet = wallet_map[s["to"]]
+                # Convert settlement amount to USDC wei (6 decimals)
+                amount_wei = round(s["amount"] / 100 * 1_000_000)
+                transfers.append({
+                    "from_wallet": from_wallet,
+                    "to_wallet": to_wallet,
+                    "amount_wei": str(amount_wei),
+                    "calldata": _encode_transfer_calldata(to_wallet, amount_wei),
+                })
 
-        result["execution"] = {
-            "network": SETTLEMENT_NETWORK,
-            "token_contract": SETTLEMENT_TOKEN_CONTRACT,
-            "transfers": transfers,
-            "note": (
-                "Calldata encodes ERC-20 transfer(address,uint256). "
-                "Caller must sign and submit each transfer from the from_wallet."
-            ),
-        }
+            result["execution"] = {
+                "network": SETTLEMENT_NETWORK,
+                "token_contract": SETTLEMENT_TOKEN_CONTRACT,
+                "transfers": transfers,
+                "note": (
+                    "Calldata encodes ERC-20 transfer(address,uint256). "
+                    "Caller must sign and submit each transfer from the from_wallet."
+                ),
+            }
 
     return result
 

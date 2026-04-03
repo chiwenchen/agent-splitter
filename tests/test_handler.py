@@ -1,6 +1,7 @@
 import json
 import sys
 import os
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -723,3 +724,195 @@ def test_split_settle_participant_mismatch(monkeypatch):
     response = lambda_handler(event, {})
     assert response["statusCode"] == 400
     assert "not found in group" in json.loads(response["body"])["error"]
+
+
+# ---------------------------------------------------------------------------
+# Home page tests
+# ---------------------------------------------------------------------------
+
+def test_home_page_returns_html():
+    event = {"rawPath": "/", "requestContext": {"http": {"method": "GET"}}}
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 200
+    assert response["headers"]["Content-Type"] == "text/html"
+    assert "SplitSettle" in response["body"]
+    assert "preact" in response["body"].lower()
+
+
+def test_home_no_auth_needed():
+    """Home page works without API key."""
+    event = {"rawPath": "/", "requestContext": {"http": {"method": "GET"}}, "headers": {}}
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 200
+
+
+# ---------------------------------------------------------------------------
+# Share endpoint tests
+# ---------------------------------------------------------------------------
+
+_fake_shares_db = {}
+
+
+def _fake_share_save(share_id, request_body, result):
+    _fake_shares_db[share_id] = {
+        "request_body": request_body,
+        "result": result,
+        "created_at": "2026-04-03T10:00:00Z",
+        "ttl_expiry": int(time.time()) + 86400 * 30,
+    }
+
+
+def _fake_share_get(share_id):
+    return _fake_shares_db.get(share_id)
+
+
+@pytest.fixture
+def share_env(monkeypatch):
+    _fake_shares_db.clear()
+    monkeypatch.setenv("GROUPS_TABLE", "test-groups")
+    monkeypatch.setattr(handler, "_save_share", _fake_share_save)
+    monkeypatch.setattr(handler, "_get_share", _fake_share_get)
+    yield
+
+
+def test_share_creates_and_returns_id(share_env):
+    body = {"currency": "TWD", "participants": ["A", "B"],
+            "expenses": [{"paid_by": "A", "amount": 100, "split_among": ["A", "B"]}]}
+    event = {"rawPath": "/v1/share", "requestContext": {"http": {"method": "POST"}},
+             "headers": {}, "body": json.dumps(body)}
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 200
+    result = json.loads(response["body"])
+    assert "share_id" in result
+    assert result["url"].startswith("/s/")
+
+
+def test_share_invalid_body(share_env):
+    body = {"currency": "TWD"}  # missing participants
+    event = {"rawPath": "/v1/share", "requestContext": {"http": {"method": "POST"}},
+             "headers": {}, "body": json.dumps(body)}
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 400
+
+
+def test_share_no_auth_needed(share_env, monkeypatch):
+    """Share endpoint works without API key."""
+    monkeypatch.setenv("API_KEY", "secret123")
+    body = {"currency": "USD", "participants": ["A", "B"],
+            "expenses": [{"paid_by": "A", "amount": 50, "split_among": ["A", "B"]}]}
+    event = {"rawPath": "/v1/share", "requestContext": {"http": {"method": "POST"}},
+             "headers": {}, "body": json.dumps(body)}
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 200
+
+
+# ---------------------------------------------------------------------------
+# Share page tests
+# ---------------------------------------------------------------------------
+
+def test_share_page_renders(share_env):
+    # Create a share first
+    _fake_share_save("test1234", {"currency": "TWD"}, {
+        "currency": "TWD", "total_expenses": 1500,
+        "settlements": [{"from": "Bob", "to": "Alice", "amount": 500}],
+        "summary": [{"participant": "Alice"}, {"participant": "Bob"}],
+        "num_settlements": 1,
+    })
+    event = {"rawPath": "/s/test1234", "requestContext": {"http": {"method": "GET"}}, "headers": {}}
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 200
+    assert response["headers"]["Content-Type"] == "text/html"
+    assert "Alice" in response["body"]
+    assert "Bob" in response["body"]
+
+
+def test_share_page_has_og_tags(share_env):
+    _fake_share_save("og-test1", {"currency": "USD"}, {
+        "currency": "USD", "total_expenses": 100,
+        "settlements": [{"from": "B", "to": "A", "amount": 50}],
+        "summary": [{"participant": "A"}, {"participant": "B"}],
+        "num_settlements": 1,
+    })
+    event = {"rawPath": "/s/og-test1", "requestContext": {"http": {"method": "GET"}}, "headers": {}}
+    response = lambda_handler(event, {})
+    assert "og:title" in response["body"]
+    assert "og:description" in response["body"]
+
+
+def test_share_page_not_found(share_env):
+    event = {"rawPath": "/s/nonexist", "requestContext": {"http": {"method": "GET"}}, "headers": {}}
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 404
+    assert "expired" in response["body"].lower() or "not found" in response["body"].lower()
+
+
+def test_share_page_expired(share_env):
+    _fake_shares_db["expired1"] = {
+        "request_body": {}, "result": {},
+        "created_at": "2026-01-01T00:00:00Z",
+        "ttl_expiry": 1,  # expired long ago
+    }
+    event = {"rawPath": "/s/expired1", "requestContext": {"http": {"method": "GET"}}, "headers": {}}
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 404
+
+
+# ---------------------------------------------------------------------------
+# wallet_address optional tests
+# ---------------------------------------------------------------------------
+
+def test_create_group_no_wallet(groups_env):
+    body = {
+        "group_id": "no-wallet-group",
+        "participants": [
+            {"name": "Alice"},
+            {"name": "Bob"},
+        ],
+    }
+    response = lambda_handler(_groups_event(body), {})
+    assert response["statusCode"] == 200
+    result = json.loads(response["body"])
+    assert result["participants"] == 2
+
+
+def test_split_settle_group_no_wallet_skips_execution(monkeypatch):
+    monkeypatch.setenv("API_KEY", "testkey")
+    monkeypatch.setenv("GROUPS_TABLE", "test-groups")
+    monkeypatch.setattr(handler, "_get_group_participants",
+                        lambda gid: {"Alice": "", "Bob": ""})  # no wallets
+
+    settle_body = {
+        "currency": "USD",
+        "group_id": "no-wallet",
+        "participants": ["Alice", "Bob"],
+        "expenses": [{"paid_by": "Alice", "amount": 100, "split_among": ["Alice", "Bob"]}],
+    }
+    event = {
+        "rawPath": "/v1/split_settle",
+        "requestContext": {"http": {"method": "POST"}},
+        "headers": {"x-api-key": "testkey"},
+        "body": json.dumps(settle_body),
+    }
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 200
+    result = json.loads(response["body"])
+    assert "execution" not in result  # no wallets → no execution block
+    assert result["num_settlements"] == 1  # but settlements still calculated
+
+
+# ---------------------------------------------------------------------------
+# Regression: agent API still requires auth
+# ---------------------------------------------------------------------------
+
+def test_agent_api_still_requires_auth(monkeypatch):
+    """Verify /v1/split_settle still requires API key (regression test)."""
+    monkeypatch.setenv("API_KEY", "secret123")
+    event = {
+        "rawPath": "/v1/split_settle",
+        "requestContext": {"http": {"method": "POST"}},
+        "headers": {},  # no API key
+        "body": json.dumps({"currency": "USD", "participants": ["A", "B"],
+                           "expenses": [{"paid_by": "A", "amount": 10, "split_among": ["A", "B"]}]}),
+    }
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 403

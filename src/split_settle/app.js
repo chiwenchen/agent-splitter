@@ -180,7 +180,16 @@ function App() {
   function addName() { if(!newName.trim()||names.includes(newName.trim()))return; setP([...participants.filter(p=>p.trim()),newName.trim(),'']); setNewName(''); }
   function removeName(n) { setP(participants.filter(p=>p!==n)); setE(expenses.filter(e=>e.paid_by!==n&&!e.split_among.includes(n))); }
   function openForm() { setFormDesc('');setFormAmt('');setFormPayer(names[0]||'');setFormSplit([...names]);setShowForm(true); }
-  function addExpense() { const a=parseFloat(formAmt); if(!a||a<=0||!formPayer||formSplit.length===0)return; setE([...expenses,{description:formDesc||'',paid_by:formPayer,amount:a,split_among:[...formSplit]}]); setShowForm(false); setAddHint(true); setTimeout(()=>setAddHint(false),1500); }
+  function addExpense() {
+    const a=parseFloat(formAmt);
+    if(!a||a<=0) {
+      const el=document.getElementById('amt-input');
+      if(el){el.focus();el.style.boxShadow='0 0 0 2px #e8605080,var(--neu-in)';setTimeout(()=>el.style.boxShadow='',1000);}
+      return;
+    }
+    if(!formPayer||formSplit.length===0)return;
+    setE([...expenses,{description:formDesc||'',paid_by:formPayer,amount:a,split_among:[...formSplit]}]); setShowForm(false); setAddHint(true); setTimeout(()=>setAddHint(false),1500);
+  }
   function removeExpense(i) { setE(expenses.filter((_,idx)=>idx!==i)); setShareUrl(''); }
   function changeCurrency(c) { setCurrency(c); localStorage.setItem('ss_currency',c); }
   function toggleSplit(n) { setFormSplit(formSplit.includes(n)?formSplit.filter(x=>x!==n):[...formSplit,n]); }

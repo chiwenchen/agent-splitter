@@ -904,16 +904,16 @@ NOT_FOUND_HTML = """<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SplitSettle - Not Found</title>
   <style>
-    body { font-family: -apple-system, system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0;
+    body { font-family: -apple-system, system-ui, sans-serif; background: #f0fdf9; color: #1a3a35;
            display: flex; justify-content: center; align-items: center; min-height: 100vh; text-align: center; }
-    a { color: #4a9eff; text-decoration: none; }
+    a { color: #14b8a6; text-decoration: none; font-weight: 600; }
     a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
   <div>
-    <h2 style="color:#fff;margin-bottom:8px">Split not found</h2>
-    <p style="color:#888;margin-bottom:24px">This split has expired or doesn't exist.</p>
+    <h2 style="margin-bottom:8px">Split not found</h2>
+    <p style="color:#5a8a80;margin-bottom:24px">This split has expired or doesn't exist.</p>
     <a href="/">Create a new split →</a>
   </div>
 </body>
@@ -930,24 +930,28 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
   <meta property="og:type" content="website" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0;
+    body { font-family: -apple-system, system-ui, sans-serif; background: #f0fdf9; color: #1a3a35;
            min-height: 100vh; padding: 16px; }
     .container { max-width: 480px; margin: 0 auto; }
-    h1 { font-size: 20px; color: #fff; margin-bottom: 4px; }
-    .date { font-size: 12px; color: #666; margin-bottom: 20px; }
-    .participants { font-size: 14px; color: #888; margin-bottom: 4px; }
-    .total { font-size: 14px; color: #888; margin-bottom: 20px; }
-    .settlement { padding: 10px 0; border-bottom: 1px solid #1a1a1a; font-size: 15px; }
-    .from { color: #e74c3c; font-weight: 600; }
-    .to { color: #10b981; font-weight: 600; }
-    .amount { float: right; font-weight: 600; }
-    .summary { text-align: center; color: #888; font-size: 13px; margin: 16px 0; }
-    .check { color: #10b981; }
-    .cta { text-align: center; margin-top: 40px; padding: 20px; border-top: 1px solid #1a1a1a; }
-    .cta a { display: inline-block; background: #4a9eff; color: #fff; text-decoration: none;
-             padding: 12px 24px; border-radius: 8px; font-weight: 600; }
-    .cta a:hover { background: #3a8eef; }
-    .cta p { color: #666; font-size: 13px; margin-bottom: 12px; }
+    h1 { font-size: 20px; color: #1a3a35; margin-bottom: 4px; }
+    .date { font-size: 12px; color: #8ab5aa; margin-bottom: 20px; }
+    .participants { font-size: 14px; color: #5a8a80; margin-bottom: 4px; }
+    .total { font-size: 14px; color: #5a8a80; margin-bottom: 20px; }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .settlement { padding: 10px 12px; margin-bottom: 6px; border-radius: 8px; font-size: 15px;
+                  background: #fff1f0; border: 1px solid #fecdd3;
+                  animation: slideIn 0.3s ease-out both; animation-delay: calc(var(--i,0) * 0.1s); }
+    .from { color: #f97066; font-weight: 600; }
+    .to { color: #14b8a6; font-weight: 600; }
+    .amount { float: right; font-weight: 700; }
+    .summary { text-align: center; color: #5a8a80; font-size: 13px; margin: 16px 0; }
+    .check { color: #14b8a6; }
+    .cta { text-align: center; margin-top: 40px; padding: 20px; border-top: 1px solid #b0e0d0; }
+    .cta a { display: inline-block; background: #14b8a6; color: #fff; text-decoration: none;
+             padding: 12px 24px; border-radius: 8px; font-weight: 600;
+             box-shadow: 0 4px 12px rgba(20,184,166,0.3); }
+    .cta a:hover { background: #0d9488; }
+    .cta p { color: #8ab5aa; font-size: 13px; margin-bottom: 12px; }
   </style>
 </head>
 <body>
@@ -977,9 +981,9 @@ def _render_share_page(result: dict, created_at: str = "") -> str:
     n_sett = len(settlements)
 
     settlements_html = ""
-    for s in settlements:
+    for i, s in enumerate(settlements):
         settlements_html += (
-            f'<div class="settlement">'
+            f'<div class="settlement" style="--i:{i}">'
             f'<span class="from">{s["from"]}</span> owes '
             f'<span class="to">{s["to"]}</span>'
             f'<span class="amount">{currency} {s["amount"]:,.2f}</span>'

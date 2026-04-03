@@ -277,7 +277,7 @@ function App() {
       <div class="section">
         <div class="section-title">${t.settlement}</div>
         ${result.settlements.map((s, idx) => html`
-          <div class="result-item" style="--i:${idx}">
+          <div class="result-item" key="${s.from}-${s.to}-${s.amount}-${expenses.length}" style="--i:${idx}">
             <span class="result-from">${s.from}</span> ${t.owes}
             <span class="result-to"> ${s.to}</span>
             <span class="result-amount">${currency} ${s.amount.toLocaleString()}</span>

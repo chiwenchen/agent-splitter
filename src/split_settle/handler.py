@@ -739,8 +739,8 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
     @keyframes receiptFloat{0%{left:100%}100%{left:-200%}}
     button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     /* Golden border orbit — faithful port of CodePen #b */
-    @property --orb-r { syntax:'<angle>'; inherits:false; initial-value:0deg; }
-    @property --orb-x { syntax:'<length>'; inherits:false; initial-value:14px; }
+    @property --orb-r { syntax:"<angle>"; inherits:false; initial-value:0deg; }
+    @property --orb-x { syntax:"<length>"; inherits:false; initial-value:14px; }
     .input-orbit { position:relative;border-radius:14px; }
     .input-orbit::before { content:'';position:absolute;inset:0;border-radius:14px;z-index:0;
       background:conic-gradient(from calc(var(--orb-r) - 80deg) at var(--orb-x) 22px,

@@ -621,7 +621,7 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
       --red: #f97066; --red-hover: #e5453a;
       --tag-blue-bg: #dbeafe; --tag-blue: #2563eb;
       --tag-amber-bg: #fef3c7; --tag-amber: #b45309;
-      --result-bg: #fff1f0; --result-border: #fecdd3;
+      --result-bg: #f9e1d2; --result-border: #fecdd3;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
@@ -939,7 +939,7 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
     .total { font-size: 14px; color: #5a8a80; margin-bottom: 20px; }
     @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     .settlement { padding: 10px 12px; margin-bottom: 6px; border-radius: 8px; font-size: 15px;
-                  background: #fff1f0; border: 1px solid #fecdd3;
+                  background: #f9e1d2; border: 1px solid #fecdd3;
                   animation: slideIn 0.3s ease-out both; animation-delay: calc(var(--i,0) * 0.1s); }
     .from { color: #f97066; font-weight: 600; }
     .to { color: #14b8a6; font-weight: 600; }

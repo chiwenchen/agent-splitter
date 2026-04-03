@@ -311,6 +311,72 @@ function App() {
     <div style="text-align:center;margin-top:40px;font-size:11px;color:var(--text-muted)">
       <a href="/docs" style="color:var(--text-secondary)">API Docs</a> · Powered by x402
     </div>
+
+    <${ColorPalette} />
+  `;
+}
+
+function ColorPalette() {
+  const [open, setOpen] = useState(false);
+  const vars = [
+    { key: '--red', label: 'Owes (from)', def: '#f97066' },
+    { key: '--accent', label: 'Receives (to)', def: '#14b8a6' },
+    { key: '--result-bg', label: 'Result card bg', def: '#f9e1d2' },
+    { key: '--result-border', label: 'Result card border', def: '#fecdd3' },
+    { key: '--bg-primary', label: 'Page bg', def: '#f0fdf9' },
+    { key: '--bg-card', label: 'Card bg', def: '#ffffff' },
+    { key: '--border', label: 'Border', def: '#b0e0d0' },
+    { key: '--text-primary', label: 'Text', def: '#1a3a35' },
+  ];
+  function apply(key, val) {
+    document.documentElement.style.setProperty(key, val);
+  }
+  function exportVars() {
+    const lines = vars.map(v => {
+      const cur = getComputedStyle(document.documentElement).getPropertyValue(v.key).trim();
+      return `${v.key}: ${cur};`;
+    });
+    const text = ':root {\n  ' + lines.join('\n  ') + '\n}';
+    navigator.clipboard?.writeText(text);
+    alert('Copied CSS to clipboard!');
+  }
+  function reset() {
+    vars.forEach(v => { document.documentElement.style.setProperty(v.key, v.def); });
+  }
+
+  if (!open) return html`
+    <button onClick=${() => setOpen(true)}
+      style="position:fixed;bottom:16px;right:16px;background:#1a3a35;color:#fff;border:none;
+             border-radius:50%;width:44px;height:44px;font-size:20px;cursor:pointer;
+             box-shadow:0 2px 8px rgba(0,0,0,0.15);z-index:999">🎨</button>
+  `;
+
+  return html`
+    <div style="position:fixed;bottom:16px;right:16px;background:#fff;border:1px solid #b0e0d0;
+                border-radius:12px;padding:16px;width:260px;box-shadow:0 4px 20px rgba(0,0,0,0.12);
+                z-index:999;font-size:13px;color:#1a3a35">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <strong>Color Palette</strong>
+        <button onClick=${() => setOpen(false)}
+          style="background:none;border:none;font-size:18px;cursor:pointer;color:#888">x</button>
+      </div>
+      ${vars.map(v => html`
+        <div key=${v.key} style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <input type="color" value=${v.def}
+            style="width:32px;height:28px;border:1px solid #ddd;border-radius:4px;cursor:pointer;padding:0"
+            onInput=${e => apply(v.key, e.target.value)} />
+          <span style="flex:1;font-size:12px">${v.label}</span>
+        </div>
+      `)}
+      <div style="display:flex;gap:6px;margin-top:12px">
+        <button onClick=${exportVars}
+          style="flex:1;background:#14b8a6;color:#fff;border:none;border-radius:6px;padding:6px;
+                 font-size:12px;font-weight:600;cursor:pointer">Copy CSS</button>
+        <button onClick=${reset}
+          style="flex:1;background:#f0f0f0;color:#666;border:none;border-radius:6px;padding:6px;
+                 font-size:12px;cursor:pointer">Reset</button>
+      </div>
+    </div>
   `;
 }
 

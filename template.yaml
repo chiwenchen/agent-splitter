@@ -117,6 +117,12 @@ Resources:
             Path: /v1/groups
             Method: post
             ApiId: !Ref SplitSettleApi
+        Docs:
+          Type: HttpApi
+          Properties:
+            Path: /docs
+            Method: get
+            ApiId: !Ref SplitSettleApi
 
 Outputs:
   ApiUrl:

@@ -738,16 +738,28 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
                            animation:shimmerSweep 2.5s ease-in-out infinite;pointer-events:none; }
     @keyframes receiptFloat{0%{left:100%}100%{left:-200%}}
     button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-    /* Golden border orbit — rotating gradient, works in all browsers */
-    @keyframes orbitSpin { to { transform:translate(-50%,-50%) rotate(360deg); } }
-    .input-orbit { position:relative;border-radius:14px;overflow:hidden;padding:2px; }
-    .input-orbit::before { content:'';position:absolute;top:50%;left:50%;
-      width:max(200%,600px);height:max(200%,600px);
-      transform:translate(-50%,-50%) rotate(0deg);
-      background:conic-gradient(#1e3636 0%,#1e3636 65%,#ffd080 75%,#e8a84c 80%,#ffd080 85%,#1e3636 95%,#1e3636 100%);
-      animation:orbitSpin 3s linear infinite; }
-    .input-orbit::after { content:'';position:absolute;inset:2px;border-radius:12px;background:var(--layer-2);z-index:1; }
-    .input-orbit input { position:relative;z-index:2; }
+    /* Golden light ball traveling along border */
+    .input-orbit { position:relative;border-radius:14px;padding:2px; }
+    .input-orbit::before { content:'';position:absolute;width:20px;height:20px;border-radius:50%;
+      background:radial-gradient(circle,#ffd080,#e8a84c 40%,transparent 70%);
+      box-shadow:0 0 12px 4px rgba(232,168,76,0.6),0 0 24px 8px rgba(232,168,76,0.3);
+      z-index:3;animation:orbitPath 3s linear infinite;pointer-events:none; }
+    .input-orbit::after { content:'';position:absolute;inset:0;border-radius:14px;
+      border:2px solid #3a5e5e;z-index:0; }
+    .input-orbit input { position:relative;z-index:1; }
+    @keyframes orbitPath {
+      0%   { top:-10px; left:14px; }
+      35%  { top:-10px; left:calc(100% - 34px); }
+      40%  { top:-4px;  left:calc(100% - 16px); }
+      45%  { top:calc(50% - 10px); left:calc(100% - 10px); }
+      50%  { top:calc(100% - 16px); left:calc(100% - 16px); }
+      55%  { top:calc(100% - 10px); left:calc(100% - 34px); }
+      85%  { top:calc(100% - 10px); left:14px; }
+      90%  { top:calc(100% - 16px); left:-4px; }
+      95%  { top:calc(50% - 10px); left:-10px; }
+      97%  { top:-4px; left:-4px; }
+      100% { top:-10px; left:14px; }
+    }
   </style>
   <script type="importmap">{"imports":{"preact":"https://esm.sh/preact@10.25.4","preact/hooks":"https://esm.sh/preact@10.25.4/hooks","htm/preact":"https://esm.sh/htm@3.1.1/preact?external=preact","react":"https://esm.sh/preact@10.25.4/compat","boring-avatars":"https://esm.sh/boring-avatars@1?external=react"}}</script>
 </head>

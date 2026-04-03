@@ -608,91 +608,147 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SplitSettle - Split Bills Instantly</title>
+  <title>Split Senpai - 分帳仙貝</title>
   <meta name="description" content="Split expenses with friends. No registration, no app download. Share a link and settle up.">
   <style>
     :root {
-      --bg-primary: #f0fdf9; --bg-card: #fff; --bg-input: #fff;
-      --bg-hover: #e0faf2; --bg-form: #e8fcf5;
-      --border: #b0e0d0; --border-focus: #14b8a6;
-      --text-primary: #1a3a35; --text-secondary: #5a8a80; --text-muted: #8ab5aa;
-      --accent: #14b8a6; --accent-hover: #0d9488;
-      --green: #14b8a6; --green-dark: #0d9488; --green-bg: #e0faf2;
-      --red: #f97066; --red-hover: #e5453a;
-      --tag-blue-bg: #dbeafe; --tag-blue: #2563eb;
-      --tag-amber-bg: #fef3c7; --tag-amber: #b45309;
-      --result-bg: #fff1f0; --result-border: #fecdd3;
+      --layer-0:#d5d0c8; --layer-1:#2d4a4a; --layer-2:#1e3636;
+      --accent:#e8a84c; --accent-dark:#c88830;
+      --text-on-dark:#e0d5c4; --text-muted:#8aaa9e; --text-dim:#5a7a70;
+      --border:#3a5e5e;
+      --r-card:19px; --r-outer:28px; --r-sm:12px;
+      --neu-out:4px 4px 8px rgba(10,30,30,0.4),-2px -2px 4px rgba(60,100,100,0.1);
+      --neu-in:inset -3px 3px 6px rgba(10,30,30,0.5),inset 3px -3px 6px rgba(60,100,100,0.15);
     }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-           background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; padding: 16px; }
-    .container { max-width: 480px; margin: 0 auto; }
-    .header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-    h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; color: var(--text-primary); }
-    .subtitle { font-size: 13px; color: var(--text-secondary); }
-    .lang-btn { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary);
-                border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 600; cursor: pointer;
-                letter-spacing: 0.5px; }
-    .lang-btn:hover { border-color: var(--accent); color: var(--accent); }
-    .section { margin-bottom: 20px; }
-    .section-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;
-                     letter-spacing: 0.5px; margin-bottom: 8px; }
-    .chip { display: inline-flex; align-items: center; background: var(--bg-card); border: 1px solid var(--border);
-            border-radius: 20px; padding: 6px 12px; margin: 0 4px 6px 0; font-size: 14px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
-    .chip button { background: none; border: none; color: var(--text-muted); cursor: pointer; margin-left: 6px;
-                   font-size: 16px; padding: 0 2px; }
-    .chip button:hover { color: var(--red); }
-    input, select { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary);
-                    border-radius: 8px; padding: 10px 12px; font-size: 14px; width: 100%; outline: none;
-                    transition: border-color 0.15s; }
-    input:focus, select:focus { border-color: var(--border-focus); }
-    input::placeholder { color: var(--text-muted); }
-    .row { display: flex; gap: 8px; margin-bottom: 8px; }
-    .row > * { flex: 1; }
-    .btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 10px 16px;
-           font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; transition: background 0.15s; }
-    .btn:hover { background: var(--accent-hover); }
-    .btn:disabled { background: var(--bg-card); color: var(--text-muted); cursor: not-allowed; border: 1px solid var(--border); }
-    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); }
-    .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
-    .btn-share { background: var(--accent); font-size: 16px; padding: 14px; margin-top: 16px;
-                 box-shadow: 0 4px 12px rgba(20,184,166,0.3); }
-    .btn-share:hover { background: var(--accent-hover); }
-    .expense-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 12px;
-                    margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-    .expense-card .desc { font-size: 14px; }
-    .expense-card .amount { font-weight: 600; color: var(--accent); }
-    .expense-card .meta { font-size: 12px; color: var(--text-muted); }
-    .expense-card button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 18px; }
-    .expense-card button:hover { color: var(--red); }
-    .divider { border: none; border-top: 2px solid var(--border); margin: 24px 0 16px; }
-    @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes fadeGlow { 0%,100% { box-shadow: 0 1px 4px rgba(249,112,102,0.1); }
-                          50% { box-shadow: 0 2px 12px rgba(249,112,102,0.2); } }
-    .result-item { padding: 10px 12px; margin-bottom: 6px; border-radius: 8px;
-                   background: var(--result-bg); border: 1px solid var(--result-border);
-                   animation: slideIn 0.3s ease-out both, fadeGlow 3s ease-in-out infinite;
-                   animation-delay: calc(var(--i, 0) * 0.1s), 0s; }
-    .result-from { font-weight: 600; color: var(--red); }
-    .result-to { font-weight: 600; color: var(--accent); }
-    .result-amount { float: right; font-weight: 700; }
-    .summary-line { text-align: center; color: var(--text-secondary); font-size: 13px; margin-top: 12px; }
-    .check { color: var(--accent); }
-    .share-result { text-align: center; margin-top: 16px; padding: 16px; background: var(--green-bg);
-                    border: 1px solid var(--accent); border-radius: 8px; }
-    .share-result a { color: var(--accent); word-break: break-all; }
-    .error { color: var(--red); font-size: 13px; margin-top: 8px; text-align: center; }
-    .checkbox-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-    .checkbox-group label { display: flex; align-items: center; gap: 4px; font-size: 13px;
-                            background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px;
-                            cursor: pointer; }
-    .checkbox-group label:hover { border-color: var(--accent); }
-    .checkbox-group input[type=checkbox] { width: auto; accent-color: var(--accent); }
-    .add-form { background: var(--bg-form); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+    * { margin:0;padding:0;box-sizing:border-box; }
+    body { font-family:'Inter',-apple-system,system-ui,sans-serif; background:var(--layer-0);
+           min-height:100vh; display:flex; justify-content:center; padding:16px; }
+    .container { width:100%; max-width:420px; background:var(--layer-1); border-radius:var(--r-outer);
+                 padding:28px; color:var(--text-on-dark); box-shadow:12px 12px 12px rgba(30,50,50,0.4);
+                 margin:0 auto; }
+    @media(max-width:460px) { body{padding:0;} .container{border-radius:0;min-height:100vh;} }
+    .header-row { display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px; }
+    h1 { font-size:26px;font-weight:800;color:var(--accent); }
+    .subtitle { font-size:13px;color:var(--text-muted);margin-top:2px; }
+    .lang-btn { background:var(--layer-2);border:none;color:var(--text-muted);border-radius:10px;
+                padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;box-shadow:var(--neu-out); }
+    .section { margin-bottom:20px; }
+    .section-title { font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;
+                     letter-spacing:1px;margin-bottom:10px; }
+    .chip { display:inline-flex;align-items:center;gap:7px;background:var(--layer-1);border:none;
+            border-radius:20px;padding:4px 14px 4px 4px;margin:0 6px 6px 0;font-size:13px;font-weight:600;
+            box-shadow:var(--neu-out); }
+    .chip .av { width:26px;height:26px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center; }
+    .chip button { background:none;border:none;color:var(--text-dim);cursor:pointer;margin-left:2px;font-size:13px; }
+    input,select { background:var(--layer-2);border:none;color:var(--text-on-dark);border-radius:var(--r-sm);
+                   padding:11px 14px;font-size:14px;width:100%;outline:none;box-shadow:var(--neu-in); }
+    input:focus { box-shadow:var(--neu-in),0 0 0 2px rgba(232,168,76,0.3); }
+    input::placeholder { color:var(--text-dim); }
+    select { box-shadow:var(--neu-out);padding:8px;font-size:13px; }
+    .row { display:flex;gap:8px;margin-bottom:8px; }
+    .row > * { flex:1; }
+    .btn { background:var(--accent);color:var(--layer-2);border:none;border-radius:var(--r-sm);
+           padding:11px 16px;font-size:14px;font-weight:600;width:100%;cursor:pointer;
+           box-shadow:var(--neu-out);transition:box-shadow 0.15s; }
+    .btn:active { box-shadow:var(--neu-in); }
+    .btn:disabled { background:var(--layer-2);color:var(--text-dim);cursor:not-allowed;box-shadow:var(--neu-in); }
+    .btn-outline { background:var(--layer-1);color:var(--text-muted);border:none;border-radius:var(--r-sm);
+                   box-shadow:var(--neu-out); }
+    .expense-card { background:var(--layer-2);border:none;border-radius:var(--r-card);padding:14px 16px;
+                    margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;
+                    box-shadow:var(--neu-in); }
+    .expense-card .left { display:flex;align-items:center;gap:10px; }
+    .expense-card .av { width:34px;height:34px;border-radius:50%;overflow:hidden;
+                        display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+    .expense-card .desc { font-size:14px;font-weight:500; }
+    .expense-card .amount { color:var(--accent);font-weight:700;font-size:15px;white-space:nowrap; }
+    .expense-card .meta { font-size:11px;color:var(--text-dim);margin-top:3px; }
+    .expense-card button { background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px; }
+    .tag { display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:8px;margin-right:3px; }
+    .tag-paid { background:#1a3a5a;color:#7ab8e8; }
+    .tag-split { background:#4a3020;color:#e8b080; }
+    .divider { border:none;height:2px;margin:24px 0 18px;
+               background:linear-gradient(90deg,transparent,var(--accent),var(--text-muted),var(--accent),transparent); }
+    .receipt-box { background:var(--layer-2);border-radius:var(--r-card);padding:16px 20px;
+                   margin-bottom:12px;box-shadow:var(--neu-in);position:relative; }
+    .receipt-title { text-align:center;margin-bottom:12px; }
+    .receipt-title span { background:var(--layer-1);color:var(--accent);padding:4px 16px;
+                          border-radius:8px;font-size:12px;font-weight:700;letter-spacing:0.5px; }
+    .receipt-cutout { position:relative;height:2px;margin:0 -20px 14px;
+                      background:repeating-linear-gradient(90deg,#3a5e5e 0,#3a5e5e 8px,transparent 8px,transparent 16px); }
+    .receipt-cutout::before,.receipt-cutout::after { content:'';position:absolute;top:-8px;width:16px;height:16px;
+                      border-radius:50%;background:var(--layer-1); }
+    .receipt-cutout::before { left:-8px; }
+    .receipt-cutout::after { right:-8px; }
+    .result-item { background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:var(--layer-2);
+                   border-radius:var(--r-sm);padding:12px 16px;margin-bottom:8px;
+                   display:flex;justify-content:space-between;align-items:center;box-shadow:var(--neu-out); }
+    .result-item .left { display:flex;align-items:center;gap:8px; }
+    .result-item .av { width:28px;height:28px;border-radius:50%;overflow:hidden;
+                       border:2px solid rgba(255,255,255,0.5);display:flex;align-items:center;
+                       justify-content:center;flex-shrink:0; }
+    .result-from { font-weight:700;color:#5a2020; }
+    .result-to { font-weight:700;color:#1a4a3a; }
+    .result-arrow { margin:0 3px;color:#6a4a10; }
+    .result-amount { font-weight:800;font-size:16px; }
+    .summary-line { text-align:center;background:var(--layer-2);padding:10px 16px;border-radius:var(--r-sm);
+                    font-size:12px;color:var(--text-muted);margin-top:10px;box-shadow:var(--neu-in); }
+    .check { color:var(--accent); }
+    .share-result { text-align:center;margin-top:16px;padding:16px;background:var(--layer-2);
+                    border:1px solid var(--border);border-radius:var(--r-card); }
+    .share-result a { color:var(--accent);word-break:break-all; }
+    .error { color:#e88060;font-size:13px;margin-top:8px;text-align:center; }
+    .confirm { background:var(--layer-2);border:none;border-radius:28px;padding:6px;
+               display:flex;align-items:center;margin-top:16px;box-shadow:var(--neu-in);
+               overflow:hidden;position:relative;width:100%;user-select:none;-webkit-user-select:none;
+               touch-action:none; }
+    .confirm-bg { position:absolute;left:0;top:0;bottom:0;right:0;border-radius:28px;
+                  background:linear-gradient(90deg,var(--accent),var(--accent-dark));
+                  transition:opacity 0.1s; }
+    .confirm-btn { background:var(--layer-1);color:var(--accent);border:none;border-radius:22px;
+                   padding:12px 20px;font-size:14px;font-weight:700;cursor:grab;z-index:2;
+                   box-shadow:var(--neu-out);white-space:nowrap;transition:none;min-width:140px;text-align:center; }
+    .confirm-btn:active { cursor:grabbing; }
+    .confirm-arrows { display:flex;align-items:center;margin-left:12px; }
+    .arrow-icon { width:20px;height:20px;color:var(--text-dim);margin-left:-6px;
+                  animation:arrowFlow 2s infinite;opacity:0; }
+    .arrow-icon:nth-child(1){animation-delay:0s} .arrow-icon:nth-child(2){animation-delay:.15s}
+    .arrow-icon:nth-child(3){animation-delay:.3s} .arrow-icon:nth-child(4){animation-delay:.45s}
+    .arrow-icon:nth-child(5){animation-delay:.6s}
+    @keyframes arrowFlow{0%{opacity:0;transform:translateX(-8px)}40%{opacity:.7}100%{opacity:0;transform:translateX(10px)}}
+    .checkbox-group { display:flex;flex-wrap:wrap;gap:8px;margin-top:6px; }
+    .checkbox-group label { display:flex;align-items:center;gap:4px;font-size:13px;
+                            background:var(--layer-1);border:none;border-radius:10px;padding:5px 10px;
+                            cursor:pointer;box-shadow:var(--neu-out); }
+    .checkbox-group input[type=checkbox] { width:auto;accent-color:var(--accent); }
+    .add-form { background:var(--layer-2);border:none;border-radius:var(--r-card);padding:14px;
+                margin-bottom:8px;box-shadow:var(--neu-in); }
+    @keyframes cardIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+    .expense-card-new { animation:cardIn 0.3s ease-out; }
+    @keyframes shimmerSweep{0%{left:-100%}60%{left:120%}100%{left:120%}}
+    @keyframes glowPulse{0%,100%{box-shadow:0 0 8px rgba(232,168,76,0.2),0 0 20px rgba(232,168,76,0.1)}50%{box-shadow:0 0 16px rgba(232,168,76,0.4),0 0 40px rgba(232,168,76,0.15)}}
+    .btn-add-hint { position:relative;overflow:hidden;color:var(--accent)!important;
+                    background:linear-gradient(135deg,rgba(232,168,76,0.06),rgba(232,168,76,0.12))!important;
+                    animation:glowPulse 2s ease-in-out infinite; }
+    .btn-add-hint::before { content:'🧾 💳 🍜 🚕 🍺 🧾 💳 🍜 🚕 🍺';position:absolute;top:50%;
+                            transform:translateY(-50%);white-space:nowrap;font-size:14px;letter-spacing:12px;
+                            opacity:0.2;animation:receiptFloat 8s linear infinite;pointer-events:none; }
+    .btn-add-hint::after { content:'';position:absolute;top:0;left:-100%;width:50%;height:100%;
+                           background:linear-gradient(90deg,transparent,rgba(255,255,255,0.3),transparent);
+                           animation:shimmerSweep 2.5s ease-in-out infinite;pointer-events:none; }
+    @keyframes receiptFloat{0%{left:100%}100%{left:-200%}}
+    button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+    /* Golden shimmer sweep on input border */
+    .input-orbit { position:relative;border-radius:14px;padding:2px;
+      background:var(--border);overflow:hidden; }
+    .input-orbit::before { content:'';position:absolute;top:0;left:-100%;width:60%;height:100%;
+      background:linear-gradient(90deg,transparent,#e8a84c,#ffd080,#e8a84c,transparent);
+      animation:shimmerSweep 3.5s ease-in-out infinite; }
+    .input-orbit:focus-within { background:#e8a84c; }
+    .input-orbit:focus-within::before { animation:none;display:none; }
+    .input-orbit input { position:relative;z-index:1;border-radius:12px; }
   </style>
-  <script type="importmap">{"imports":{"preact":"https://esm.sh/preact@10.25.4","preact/hooks":"https://esm.sh/preact@10.25.4/hooks","htm/preact":"https://esm.sh/htm@3.1.1/preact?external=preact"}}</script>
+  <script type="importmap">{"imports":{"preact":"https://esm.sh/preact@10.25.4","preact/hooks":"https://esm.sh/preact@10.25.4/hooks","htm/preact":"https://esm.sh/htm@3.1.1/preact?external=preact","react":"https://esm.sh/preact@10.25.4/compat","boring-avatars":"https://esm.sh/boring-avatars@1?external=react"}}</script>
 </head>
 <body>
   <div class="container" id="app"></div>
@@ -902,18 +958,24 @@ NOT_FOUND_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SplitSettle - Not Found</title>
+  <title>Split Senpai - Not Found</title>
   <style>
-    body { font-family: -apple-system, system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0;
-           display: flex; justify-content: center; align-items: center; min-height: 100vh; text-align: center; }
-    a { color: #4a9eff; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+    * { margin:0;padding:0;box-sizing:border-box; }
+    body { font-family:'Inter',-apple-system,system-ui,sans-serif; background:#d5d0c8;
+           display:flex;justify-content:center;align-items:center;min-height:100vh;padding:16px; }
+    .card { background:#2d4a4a;border-radius:28px;padding:40px;text-align:center;color:#e0d5c4;
+            box-shadow:12px 12px 12px rgba(30,50,50,0.4);max-width:380px;width:100%; }
+    h2 { color:#e8a84c;font-size:20px;margin-bottom:8px; }
+    p { color:#8aaa9e;margin-bottom:24px;font-size:14px; }
+    a { display:inline-block;background:linear-gradient(135deg,#e8a84c,#c88830);color:#1e3636;
+        text-decoration:none;padding:12px 24px;border-radius:12px;font-weight:700;font-size:14px;
+        box-shadow:4px 4px 8px rgba(10,30,30,0.4),-2px -2px 4px rgba(60,100,100,0.1); }
   </style>
 </head>
 <body>
-  <div>
-    <h2 style="color:#fff;margin-bottom:8px">Split not found</h2>
-    <p style="color:#888;margin-bottom:24px">This split has expired or doesn't exist.</p>
+  <div class="card">
+    <h2>Oops! Not found</h2>
+    <p>This split has expired or doesn't exist.</p>
     <a href="/">Create a new split →</a>
   </div>
 </body>
@@ -924,50 +986,90 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SplitSettle - {{title}}</title>
+  <title>Split Senpai - {{title}}</title>
   <meta property="og:title" content="{{og_title}}" />
   <meta property="og:description" content="{{og_desc}}" />
   <meta property="og:type" content="website" />
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, system-ui, sans-serif; background: #0a0a0a; color: #e0e0e0;
-           min-height: 100vh; padding: 16px; }
-    .container { max-width: 480px; margin: 0 auto; }
-    h1 { font-size: 20px; color: #fff; margin-bottom: 4px; }
-    .date { font-size: 12px; color: #666; margin-bottom: 20px; }
-    .participants { font-size: 14px; color: #888; margin-bottom: 4px; }
-    .total { font-size: 14px; color: #888; margin-bottom: 20px; }
-    .settlement { padding: 10px 0; border-bottom: 1px solid #1a1a1a; font-size: 15px; }
-    .from { color: #e74c3c; font-weight: 600; }
-    .to { color: #10b981; font-weight: 600; }
-    .amount { float: right; font-weight: 600; }
-    .summary { text-align: center; color: #888; font-size: 13px; margin: 16px 0; }
-    .check { color: #10b981; }
-    .cta { text-align: center; margin-top: 40px; padding: 20px; border-top: 1px solid #1a1a1a; }
-    .cta a { display: inline-block; background: #4a9eff; color: #fff; text-decoration: none;
-             padding: 12px 24px; border-radius: 8px; font-weight: 600; }
-    .cta a:hover { background: #3a8eef; }
-    .cta p { color: #666; font-size: 13px; margin-bottom: 12px; }
+    * { margin:0;padding:0;box-sizing:border-box; }
+    body { font-family:'Inter',-apple-system,system-ui,sans-serif; background:#d5d0c8;
+           min-height:100vh; display:flex; justify-content:center; padding:16px; }
+    .phone { width:100%;max-width:420px;background:#2d4a4a;border-radius:28px;padding:28px;
+             color:#e0d5c4;box-shadow:12px 12px 12px rgba(30,50,50,0.4);margin:0 auto;height:fit-content; }
+    @media(max-width:460px){body{padding:0}.phone{border-radius:0;min-height:100vh}}
+    h1 { font-size:24px;font-weight:800;color:#e8a84c;margin-bottom:2px; }
+    .date { font-size:12px;color:#5a7a70;margin-bottom:20px; }
+    .info { font-size:14px;color:#8aaa9e;margin-bottom:4px; }
+    .divider { border:none;height:2px;margin:20px 0;
+               background:linear-gradient(90deg,transparent,#e8a84c,#8aaa9e,#e8a84c,transparent); }
+    @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    .settlement { background:linear-gradient(135deg,#e8a84c,#c88830);color:#1e3636;
+                  border-radius:12px;padding:12px 16px;margin-bottom:8px;font-size:15px;
+                  display:flex;justify-content:space-between;align-items:center;
+                  box-shadow:4px 4px 8px rgba(10,30,30,0.4),-2px -2px 4px rgba(60,100,100,0.1);
+                  animation:slideIn 0.3s ease-out both;animation-delay:calc(var(--i,0)*0.1s); }
+    .from { font-weight:700;color:#5a2020; }
+    .to { font-weight:700;color:#1a4a3a; }
+    .amount { font-weight:800;font-size:16px; }
+    .summary { text-align:center;background:#1e3636;padding:10px 16px;border-radius:12px;
+               font-size:12px;color:#8aaa9e;margin-top:10px;
+               box-shadow:inset -3px 3px 6px rgba(10,30,30,0.5),inset 3px -3px 6px rgba(60,100,100,0.15); }
+    .check { color:#e8a84c; }
+    .cta { text-align:center;margin-top:30px;padding-top:20px;
+           border-top:2px solid transparent;
+           background-image:linear-gradient(#2d4a4a,#2d4a4a),linear-gradient(90deg,transparent,#e8a84c,#8aaa9e,#e8a84c,transparent);
+           background-origin:padding-box,border-box;background-clip:padding-box,border-box; }
+    .cta p { color:#5a7a70;font-size:13px;margin-bottom:12px; }
+    .cta a { display:inline-block;background:linear-gradient(135deg,#e8a84c,#c88830);color:#1e3636;
+             text-decoration:none;padding:12px 24px;border-radius:12px;font-weight:700;
+             box-shadow:4px 4px 8px rgba(10,30,30,0.4),-2px -2px 4px rgba(60,100,100,0.1); }
+    .footer { text-align:center;margin-top:20px;font-size:10px;color:#5a7a70; }
+    .footer a { color:#8aaa9e; }
+    /* Select yourself */
+    .me-picker { display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px; }
+    .me-btn { background:#1e3636;border:none;color:#8aaa9e;border-radius:16px;padding:6px 14px;
+              font-size:12px;font-weight:600;cursor:pointer;
+              box-shadow:4px 4px 8px rgba(10,30,30,0.4),-2px -2px 4px rgba(60,100,100,0.1); }
+    .me-btn.active { background:#e8a84c;color:#1e3636; }
+    .settlement.dimmed { opacity:0.3;transform:scale(0.97);filter:grayscale(0.5); }
+    .settlement { transition:opacity 0.3s,transform 0.3s,filter 0.3s; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>SplitSettle</h1>
+  <div class="phone">
+    <h1>{{share_title}}</h1>
     <div class="date">{{date}}</div>
-    <div class="participants">{{participants}}</div>
-    <div class="total">Total: {{currency}} {{total}}</div>
+    <div class="info">{{participants}}</div>
+    <div class="info" style="margin-bottom:16px">Total: {{currency}} {{total}}</div>
+    <div style="font-size:11px;color:#5a7a70;margin-bottom:8px">{{iam}}</div>
+    <div class="me-picker">
+      <button class="me-btn active" onclick="filterMe('')">{{all_label}}</button>
+      {{me_buttons}}
+    </div>
+    <hr class="divider">
     {{settlements_html}}
     <div class="summary">{{num_settlements}} transfer{{s_plural}} to settle <span class="check">✓</span></div>
     <div class="cta">
-      <p>Need to split a bill?</p>
-      <a href="/">Start splitting →</a>
+      <p>{{cta_q}}</p>
+      <a href="/">{{cta_btn}}</a>
     </div>
+    <div class="footer"><a href="/docs">API Docs</a> · Powered by x402</div>
   </div>
+  <script>
+  function filterMe(name) {
+    document.querySelectorAll('.me-btn').forEach(b => b.classList.toggle('active', b.dataset.name === name || (!name && !b.dataset.name)));
+    document.querySelectorAll('.settlement').forEach(s => {
+      if (!name) { s.classList.remove('dimmed'); return; }
+      const text = s.textContent;
+      s.classList.toggle('dimmed', !text.includes(name));
+    });
+  }
+  </script>
 </body>
 </html>"""
 
 
-def _render_share_page(result: dict, created_at: str = "") -> str:
+def _render_share_page(result: dict, created_at: str = "", si: dict = None) -> str:
     """Render the share page HTML from a split result."""
     currency = result.get("currency", "")
     total = result.get("total_expenses", 0)
@@ -977,14 +1079,18 @@ def _render_share_page(result: dict, created_at: str = "") -> str:
     n_sett = len(settlements)
 
     settlements_html = ""
-    for s in settlements:
+    for i, s in enumerate(settlements):
         settlements_html += (
-            f'<div class="settlement">'
-            f'<span class="from">{s["from"]}</span> owes '
-            f'<span class="to">{s["to"]}</span>'
+            f'<div class="settlement" style="--i:{i}">'
+            f'<span><span class="from">{s["from"]}</span> → '
+            f'<span class="to">{s["to"]}</span></span>'
             f'<span class="amount">{currency} {s["amount"]:,.2f}</span>'
             f'</div>'
         )
+
+    me_buttons = ""
+    for name in names:
+        me_buttons += f'<button class="me-btn" data-name="{name}" onclick="filterMe(\'{name}\')">{name}</button>'
 
     s_plural = "s" if n_sett != 1 else ""
     replacements = {
@@ -995,9 +1101,15 @@ def _render_share_page(result: dict, created_at: str = "") -> str:
         "{{participants}}": ", ".join(names),
         "{{currency}}": currency,
         "{{total}}": f"{total:,.2f}",
+        "{{me_buttons}}": me_buttons,
         "{{settlements_html}}": settlements_html,
         "{{num_settlements}}": str(n_sett),
         "{{s_plural}}": s_plural,
+        "{{share_title}}": si.get("title", "Split Senpai") if si else "Split Senpai",
+        "{{iam}}": si.get("iam", "I am...") if si else "I am...",
+        "{{all_label}}": si.get("all", "All") if si else "All",
+        "{{cta_q}}": si.get("cta_q", "Need to split a bill?") if si else "Need to split a bill?",
+        "{{cta_btn}}": si.get("cta", "Start splitting →") if si else "Start splitting →",
     }
     html = SHARE_PAGE_TEMPLATE
     for key, value in replacements.items():
@@ -1118,13 +1230,15 @@ def _handle_share(event):
     """POST /v1/share — public endpoint, saves split result, returns share link."""
     try:
         body = json.loads(event.get("body") or "{}")
+        lang = body.pop("lang", "en")
         result = split_settle(body)
         share_id = _generate_share_id()
         _save_share(share_id, body, result)
+        url = f"/s/{share_id}" + (f"?lang={lang}" if lang != "en" else "")
         return {
             "statusCode": 200,
             "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"share_id": share_id, "url": f"/s/{share_id}"}),
+            "body": json.dumps({"share_id": share_id, "url": url}),
         }
     except ValueError as e:
         return {
@@ -1141,10 +1255,17 @@ def _handle_share(event):
         }
 
 
+_SHARE_I18N = {
+    "en": {"title": "Split Senpai", "iam": "I am...", "all": "All", "cta_q": "Need to split a bill?", "cta": "Start splitting →"},
+    "zh-TW": {"title": "分帳仙貝", "iam": "我是...", "all": "全部", "cta_q": "也要分帳？", "cta": "開始分帳 →"},
+    "ja": {"title": "割り勘先輩", "iam": "私は...", "all": "全部", "cta_q": "割り勘する？", "cta": "始める →"},
+}
+
+
 def _handle_share_page(event):
     """GET /s/{id} — render shared result page."""
     path = event.get("rawPath", "")
-    share_id = path.split("/s/", 1)[-1] if "/s/" in path else ""
+    share_id = path.split("/s/", 1)[-1].split("?")[0] if "/s/" in path else ""
     if not share_id:
         return {"statusCode": 404, "headers": {"Content-Type": "text/html"}, "body": NOT_FOUND_HTML}
 
@@ -1152,8 +1273,12 @@ def _handle_share_page(event):
     if not data or data["ttl_expiry"] < time.time():
         return {"statusCode": 404, "headers": {"Content-Type": "text/html"}, "body": NOT_FOUND_HTML}
 
-    html = _render_share_page(data["result"], data["created_at"])
-    return {"statusCode": 200, "headers": {"Content-Type": "text/html"}, "body": html}
+    qs = event.get("queryStringParameters") or {}
+    lang = qs.get("lang", "en")
+    si = _SHARE_I18N.get(lang, _SHARE_I18N["en"])
+
+    html_out = _render_share_page(data["result"], data["created_at"], si)
+    return {"statusCode": 200, "headers": {"Content-Type": "text/html"}, "body": html_out}
 
 
 def _handle_split_settle(event):

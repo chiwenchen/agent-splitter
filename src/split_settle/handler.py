@@ -709,7 +709,7 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
     .add-form { background: var(--bg-form); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 8px; }
     @keyframes cardIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
     .expense-card-new { animation: cardIn 0.3s ease-out; }
-    /* Modern CTA hint: shimmer sweep + glow pulse + gradient border */
+    /* Modern CTA: floating receipts + shimmer + glow */
     .btn-add-hint {
       position: relative; overflow: hidden;
       border-color: var(--accent) !important; color: var(--accent) !important;
@@ -717,24 +717,24 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
       animation: glowPulse 2s ease-in-out infinite;
     }
     .btn-add-hint::before {
-      content: ''; position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(20,184,166,0.25), transparent);
-      animation: shimmerSweep 2s ease-in-out infinite;
+      content: '🧾  💳  🍜  🚕  🍺  🧾  💳  🍜  🚕  🍺';
+      position: absolute; top: 50%; transform: translateY(-50%);
+      white-space: nowrap; font-size: 14px; letter-spacing: 12px;
+      opacity: 0.25; animation: receiptFloat 8s linear infinite;
+      pointer-events: none;
     }
     .btn-add-hint::after {
-      content: ''; position: absolute; inset: -2px; border-radius: 12px; padding: 2px;
-      background: linear-gradient(135deg, #14b8a6, #f97066, #fbbf24, #14b8a6);
-      background-size: 300% 300%;
-      animation: gradientBorder 3s ease infinite;
-      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-      -webkit-mask-composite: xor; mask-composite: exclude; z-index: -1;
+      content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+      animation: shimmerSweep 2.5s ease-in-out infinite;
+      pointer-events: none;
     }
-    @keyframes shimmerSweep { 0% { left: -100%; } 50% { left: 120%; } 100% { left: 120%; } }
+    @keyframes receiptFloat { 0% { left: 100%; } 100% { left: -200%; } }
+    @keyframes shimmerSweep { 0% { left: -100%; } 60% { left: 120%; } 100% { left: 120%; } }
     @keyframes glowPulse {
       0%, 100% { box-shadow: 0 0 8px rgba(20,184,166,0.2), 0 0 20px rgba(20,184,166,0.1); }
       50% { box-shadow: 0 0 16px rgba(20,184,166,0.4), 0 0 40px rgba(20,184,166,0.15); }
     }
-    @keyframes gradientBorder { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
     button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #14b8a6; outline-offset: 2px; }
   </style>
   <script type="importmap">{"imports":{"preact":"https://esm.sh/preact@10.25.4","preact/hooks":"https://esm.sh/preact@10.25.4/hooks","htm/preact":"https://esm.sh/htm@3.1.1/preact?external=preact"}}</script>

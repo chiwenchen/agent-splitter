@@ -744,6 +744,8 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
     .input-orbit::before { content:'';position:absolute;top:0;left:-100%;width:60%;height:100%;
       background:linear-gradient(90deg,transparent,#e8a84c,#ffd080,#e8a84c,transparent);
       animation:shimmerSweep 3.5s ease-in-out infinite; }
+    .input-orbit:focus-within { background:#e8a84c; }
+    .input-orbit:focus-within::before { animation:none;display:none; }
     .input-orbit input { position:relative;z-index:1;border-radius:12px; }
   </style>
   <script type="importmap">{"imports":{"preact":"https://esm.sh/preact@10.25.4","preact/hooks":"https://esm.sh/preact@10.25.4/hooks","htm/preact":"https://esm.sh/htm@3.1.1/preact?external=preact","react":"https://esm.sh/preact@10.25.4/compat","boring-avatars":"https://esm.sh/boring-avatars@1?external=react"}}</script>

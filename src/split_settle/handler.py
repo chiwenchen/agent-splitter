@@ -608,7 +608,7 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SplitSettle - Split Bills Instantly</title>
+  <title>Split Senpai - 分帳仙貝</title>
   <meta name="description" content="Split expenses with friends. No registration, no app download. Share a link and settle up.">
   <style>
     :root {
@@ -949,7 +949,7 @@ NOT_FOUND_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SplitSettle - Not Found</title>
+  <title>Split Senpai - Not Found</title>
   <style>
     * { margin:0;padding:0;box-sizing:border-box; }
     body { font-family:'Inter',-apple-system,system-ui,sans-serif; background:#d5d0c8;
@@ -965,7 +965,7 @@ NOT_FOUND_HTML = """<!DOCTYPE html>
 </head>
 <body>
   <div class="card">
-    <h2>Split not found</h2>
+    <h2>Oops! Not found</h2>
     <p>This split has expired or doesn't exist.</p>
     <a href="/">Create a new split →</a>
   </div>
@@ -977,7 +977,7 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SplitSettle - {{title}}</title>
+  <title>Split Senpai - {{title}}</title>
   <meta property="og:title" content="{{og_title}}" />
   <meta property="og:description" content="{{og_desc}}" />
   <meta property="og:type" content="website" />
@@ -1028,7 +1028,7 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
 </head>
 <body>
   <div class="phone">
-    <h1>SplitSettle</h1>
+    <h1>Split Senpai</h1>
     <div class="date">{{date}}</div>
     <div class="info">{{participants}}</div>
     <div class="info" style="margin-bottom:16px">Total: {{currency}} {{total}}</div>

@@ -7,7 +7,7 @@ const avatarColors = ['#1a2a5a','#3a5a9a','#7aa0d0','#b0c8e8','#e0e8f0'];
 
 const i18n = {
   en: {
-    title:'SplitSettle', subtitle:'Split expenses instantly. No registration needed.',
+    title:'Split Senpai', subtitle:'Split expenses instantly. No registration needed.',
     participants:'Participants', addName:'Add a name...', expenses:'Expenses',
     addExpense:'+ Add Expense', description:'Description (optional)', amount:'Amount',
     splitAmong:'Split among', add:'Add', cancel:'Cancel',
@@ -19,7 +19,7 @@ const i18n = {
     expense:'Expense', paid:'paid', splitWays:'ways', lang:'EN',
   },
   'zh-TW': {
-    title:'SplitSettle', subtitle:'秒算分帳，免註冊、免下載',
+    title:'分帳仙貝', subtitle:'秒算分帳，免註冊、免下載',
     participants:'參加者', addName:'輸入名字...', expenses:'帳單',
     addExpense:'+ 新增帳單', description:'說明（選填）', amount:'金額',
     splitAmong:'分給誰', add:'新增', cancel:'取消',
@@ -31,7 +31,7 @@ const i18n = {
     expense:'消費', paid:'墊付', splitWays:'人分', lang:'中',
   },
   ja: {
-    title:'SplitSettle', subtitle:'割り勘を即計算。登録不要。',
+    title:'割り勘先輩', subtitle:'割り勘を即計算。登録不要。',
     participants:'参加者', addName:'名前を入力...', expenses:'支出',
     addExpense:'+ 支出を追加', description:'説明（任意）', amount:'金額',
     splitAmong:'割り勘メンバー', add:'追加', cancel:'キャンセル',
@@ -246,8 +246,9 @@ function App() {
       `)}
       ${showForm ? html`
         <div class="add-form">
-          <input placeholder=${t.description} value=${formDesc} onInput=${e=>setFormDesc(e.target.value)} style="margin-bottom:8px" />
-          <input placeholder=${t.amount} inputmode="decimal" value=${formAmt} onInput=${e=>setFormAmt(e.target.value)} style="margin-bottom:8px" />
+          <input placeholder=${t.description} value=${formDesc} onInput=${e=>setFormDesc(e.target.value)} style="margin-bottom:8px"
+            onKeyDown=${e=>{if(e.key==='Enter'){e.preventDefault();e.target.parentElement.querySelector('[inputmode="decimal"]').focus()}}} />
+          <input id="amt-input" placeholder=${t.amount} inputmode="decimal" value=${formAmt} onInput=${e=>setFormAmt(e.target.value)} style="margin-bottom:8px" />
           <select value=${formPayer} onChange=${e=>setFormPayer(e.target.value)} style="margin-bottom:8px">
             ${names.map(n=>html`<option key=${n} value=${n}>${n} ${t.paid}</option>`)}
           </select>

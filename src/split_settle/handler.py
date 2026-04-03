@@ -278,42 +278,36 @@ OPENAPI_SCHEMA = {
     "openapi": "3.1.0",
     "info": {
         "title": "SplitSettle API",
-        "description": "Calculate the minimum number of transfers to settle shared expenses.",
-        "version": "1.0.0",
+        "description": (
+            "AI agent expense splitting with on-chain settlement execution. "
+            "Calculate minimum transfers, then get ABI-encoded calldata to "
+            "settle debts on Base Sepolia with USDC."
+        ),
+        "version": "2.0.0",
     },
     "servers": [
         {
-            "url": "https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com",
+            "url": "https://sfd9k548wj.execute-api.ap-northeast-1.amazonaws.com",
             "description": "Production",
         }
     ],
     "paths": {
-        "/v1/split_settle": {
+        "/v1/groups": {
             "post": {
-                "summary": "Calculate optimal settlement plan",
-                "description": "Given a list of participants and shared expenses, returns the minimum transfers needed to settle all debts.",
+                "summary": "Create a wallet group",
+                "description": "Register participant names with EIP-55 checksummed wallet addresses. Used by /v1/split_settle to generate on-chain settlement calldata.",
+                "tags": ["Groups"],
                 "security": [{"ApiKeyAuth": []}],
                 "requestBody": {
                     "required": True,
                     "content": {
                         "application/json": {
-                            "schema": {"$ref": "#/components/schemas/SplitSettleRequest"},
+                            "schema": {"$ref": "#/components/schemas/CreateGroupRequest"},
                             "example": {
-                                "currency": "TWD",
-                                "participants": ["Alice", "Bob", "Carol"],
-                                "expenses": [
-                                    {
-                                        "description": "Dinner",
-                                        "paid_by": "Alice",
-                                        "amount": 1200,
-                                        "split_among": ["Alice", "Bob", "Carol"],
-                                    },
-                                    {
-                                        "description": "Taxi",
-                                        "paid_by": "Bob",
-                                        "amount": 300,
-                                        "split_among": ["Alice", "Bob", "Carol"],
-                                    },
+                                "group_id": "trip-tokyo-2026",
+                                "participants": [
+                                    {"name": "Alice", "wallet_address": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"},
+                                    {"name": "Bob", "wallet_address": "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359"},
                                 ],
                             },
                         }
@@ -321,7 +315,63 @@ OPENAPI_SCHEMA = {
                 },
                 "responses": {
                     "200": {
-                        "description": "Settlement plan",
+                        "description": "Group created",
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/CreateGroupResponse"},
+                            }
+                        },
+                    },
+                    "400": {"description": "Invalid input (bad wallet address, missing fields)"},
+                    "409": {"description": "Group ID already exists"},
+                },
+            }
+        },
+        "/v1/split_settle": {
+            "post": {
+                "summary": "Calculate settlement plan (+ optional execution calldata)",
+                "description": (
+                    "Given participants and expenses, returns minimum transfers to settle all debts. "
+                    "When group_id is provided, also returns ABI-encoded ERC-20 transfer calldata "
+                    "for on-chain settlement on Base Sepolia."
+                ),
+                "tags": ["Settlement"],
+                "security": [{"ApiKeyAuth": []}],
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {"$ref": "#/components/schemas/SplitSettleRequest"},
+                            "examples": {
+                                "basic": {
+                                    "summary": "Basic split (no on-chain)",
+                                    "value": {
+                                        "currency": "TWD",
+                                        "participants": ["Alice", "Bob", "Carol"],
+                                        "expenses": [
+                                            {"description": "Dinner", "paid_by": "Alice", "amount": 1200, "split_among": ["Alice", "Bob", "Carol"]},
+                                            {"description": "Taxi", "paid_by": "Bob", "amount": 300, "split_among": ["Alice", "Bob", "Carol"]},
+                                        ],
+                                    },
+                                },
+                                "with_group": {
+                                    "summary": "With group_id (returns calldata)",
+                                    "value": {
+                                        "currency": "USD",
+                                        "group_id": "trip-tokyo-2026",
+                                        "participants": ["Alice", "Bob"],
+                                        "expenses": [
+                                            {"description": "Hotel", "paid_by": "Alice", "amount": 200, "split_among": ["Alice", "Bob"]},
+                                        ],
+                                    },
+                                },
+                            },
+                        }
+                    },
+                },
+                "responses": {
+                    "200": {
+                        "description": "Settlement plan (with optional execution block)",
                         "content": {
                             "application/json": {
                                 "schema": {"$ref": "#/components/schemas/SplitSettleResponse"}
@@ -329,16 +379,53 @@ OPENAPI_SCHEMA = {
                         },
                     },
                     "400": {"description": "Invalid request"},
+                    "402": {"description": "Payment required (x402)"},
                     "403": {"description": "Invalid or missing API key"},
                 },
             }
-        }
+        },
+        "/health": {
+            "get": {
+                "summary": "Health check",
+                "tags": ["System"],
+                "responses": {"200": {"description": "OK"}},
+            }
+        },
     },
     "components": {
         "securitySchemes": {
             "ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "x-api-key"}
         },
         "schemas": {
+            "GroupParticipant": {
+                "type": "object",
+                "required": ["name", "wallet_address"],
+                "properties": {
+                    "name": {"type": "string"},
+                    "wallet_address": {"type": "string", "description": "EIP-55 checksummed Ethereum address"},
+                },
+            },
+            "CreateGroupRequest": {
+                "type": "object",
+                "required": ["group_id", "participants"],
+                "properties": {
+                    "group_id": {"type": "string", "description": "Lowercase alphanumeric + hyphens, 2-64 chars"},
+                    "participants": {
+                        "type": "array",
+                        "items": {"$ref": "#/components/schemas/GroupParticipant"},
+                        "minItems": 2,
+                        "maxItems": 20,
+                    },
+                },
+            },
+            "CreateGroupResponse": {
+                "type": "object",
+                "properties": {
+                    "group_id": {"type": "string"},
+                    "participants": {"type": "integer"},
+                    "created_at": {"type": "string", "format": "date-time"},
+                },
+            },
             "Expense": {
                 "type": "object",
                 "required": ["paid_by", "amount", "split_among"],
@@ -358,6 +445,7 @@ OPENAPI_SCHEMA = {
                 "required": ["currency", "participants", "expenses"],
                 "properties": {
                     "currency": {"type": "string", "description": "ISO 4217 currency code"},
+                    "group_id": {"type": "string", "description": "Optional: include to get on-chain execution calldata"},
                     "participants": {
                         "type": "array",
                         "items": {"type": "string"},
@@ -388,6 +476,27 @@ OPENAPI_SCHEMA = {
                     "amount": {"type": "number"},
                 },
             },
+            "Transfer": {
+                "type": "object",
+                "properties": {
+                    "from_wallet": {"type": "string"},
+                    "to_wallet": {"type": "string"},
+                    "amount_wei": {"type": "string"},
+                    "calldata": {"type": "string", "description": "ABI-encoded ERC-20 transfer(address,uint256)"},
+                },
+            },
+            "ExecutionBlock": {
+                "type": "object",
+                "properties": {
+                    "network": {"type": "string"},
+                    "token_contract": {"type": "string"},
+                    "transfers": {
+                        "type": "array",
+                        "items": {"$ref": "#/components/schemas/Transfer"},
+                    },
+                    "note": {"type": "string"},
+                },
+            },
             "SplitSettleResponse": {
                 "type": "object",
                 "properties": {
@@ -402,11 +511,43 @@ OPENAPI_SCHEMA = {
                     },
                     "total_expenses": {"type": "number"},
                     "num_settlements": {"type": "integer"},
+                    "execution": {
+                        "$ref": "#/components/schemas/ExecutionBlock",
+                        "description": "Present only when group_id is provided",
+                    },
                 },
             },
         },
     },
 }
+
+SWAGGER_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SplitSettle API</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+  <style>
+    body { margin: 0; background: #fafafa; }
+    #swagger-ui .topbar { display: none; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    SwaggerUIBundle({
+      url: '/openapi.json',
+      dom_id: '#swagger-ui',
+      presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset],
+      layout: 'BaseLayout',
+      deepLinking: true,
+      defaultModelsExpandDepth: 1,
+      tryItOutEnabled: true,
+    });
+  </script>
+</body>
+</html>"""
 
 
 _METHOD_NOT_ALLOWED = {
@@ -418,6 +559,7 @@ _METHOD_NOT_ALLOWED = {
 _ROUTE_METHODS = {
     "/openapi.json": "GET",
     "/health": "GET",
+    "/docs": "GET",
     "/v1/split_settle": "POST",
     "/v1/groups": "POST",
 }
@@ -443,6 +585,13 @@ def lambda_handler(event, context):
             "statusCode": 200,
             "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"status": "ok"}),
+        }
+
+    if path == "/docs":
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "text/html"},
+            "body": SWAGGER_HTML,
         }
 
     if path == "/v1/groups":

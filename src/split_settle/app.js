@@ -65,18 +65,6 @@ function ArrowIcon() {
   </svg>`;
 }
 
-function ReceiptSVG() {
-  return html`<svg viewBox="0 0 344 200" fill="none" style="display:block;width:100%">
-    <defs><clipPath id="rc"><rect width="344" height="200" fill="white"/></clipPath></defs>
-    <g clip-path="url(#rc)">
-      <rect width="344" height="200" rx="19" fill="#1e3636"/>
-      <line x1="0" y1="44" x2="344" y2="44" stroke="#3a5e5e" stroke-width="1" stroke-dasharray="8 8"/>
-      <circle cx="344" cy="44" r="12" fill="#2d4a4a"/>
-      <circle cx="0" cy="44" r="12" fill="#2d4a4a"/>
-    </g>
-  </svg>`;
-}
-
 function splitSettle(participants, expenses, currency) {
   if (participants.length < 2 || expenses.length === 0) return null;
   const pSet = new Set(participants);
@@ -219,19 +207,38 @@ function App() {
     ${result && nSett > 0 ? html`
       <hr class="divider" />
       <div class="section">
-        <div class="receipt">
-          <${ReceiptSVG} />
-          <div class="receipt-content">
-            <div class="receipt-title"><span>${t.settlement}</span></div>
-            <div style="display:flex;justify-content:space-between;color:#8aaa9e;font-size:13px;margin-bottom:4px">
-              <span>${expenses.map(e=>e.description||t.expense).join(' + ')}</span>
-              <span style="font-weight:700;color:#e8a84c">${currency} ${result.total.toLocaleString()}</span>
-            </div>
-            <div style="display:flex;gap:10px;margin-top:8px">
-              ${names.map(n=>html`<div key=${n} style="display:flex;flex-direction:column;align-items:center">
-                <${Av} name=${n} size=${30} /><div style="font-size:10px;color:#8aaa9e;margin-top:3px">${n}</div>
-              </div>`)}
-            </div>
+        <div class="receipt-box">
+          <div class="receipt-title"><span>${t.settlement}</span></div>
+          <div class="receipt-cutout"></div>
+          ${(() => {
+            // Group expenses by split_among (same participants = same group)
+            const groups = [];
+            for (const e of expenses) {
+              const key = [...e.split_among].sort().join(',');
+              const existing = groups.find(g => g.key === key);
+              if (existing) {
+                existing.descs.push(e.description || t.expense);
+                existing.total += e.amount;
+              } else {
+                groups.push({ key, descs: [e.description || t.expense], total: e.amount, members: e.split_among });
+              }
+            }
+            return groups.map((g, i) => html`
+              <div key=${i} style="margin-bottom:${i < groups.length - 1 ? '12px' : '0'};padding-bottom:${i < groups.length - 1 ? '12px;border-bottom:1px dashed #3a5e5e' : '0'}">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                  <span style="font-size:13px;color:#e0d5c4">${g.descs.join(' + ')}</span>
+                  <span style="font-weight:700;color:#e8a84c;font-size:14px">${currency} ${g.total.toLocaleString()}</span>
+                </div>
+                <div style="display:flex;gap:8px">
+                  ${g.members.map(n => html`<div key=${n} style="display:flex;align-items:center;gap:4px">
+                    <${Av} name=${n} size=${22} /><span style="font-size:10px;color:#8aaa9e">${n}</span>
+                  </div>`)}
+                </div>
+              </div>
+            `);
+          })()}
+          <div style="text-align:right;margin-top:10px;padding-top:8px;border-top:1px solid #3a5e5e;font-size:12px;color:#8aaa9e">
+            總計 <span style="font-weight:800;color:#e8a84c;font-size:15px;margin-left:4px">${currency} ${result.total.toLocaleString()}</span>
           </div>
         </div>
 

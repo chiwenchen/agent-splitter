@@ -669,12 +669,17 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
     .tag-split { background:#4a3020;color:#e8b080; }
     .divider { border:none;height:2px;margin:24px 0 18px;
                background:linear-gradient(90deg,transparent,var(--accent),var(--text-muted),var(--accent),transparent); }
-    .receipt { position:relative;margin-bottom:12px; }
-    .receipt svg { display:block;width:100%; }
-    .receipt-content { position:absolute;inset:0;padding:14px 20px; }
-    .receipt-title { text-align:center;margin-bottom:10px; }
+    .receipt-box { background:var(--layer-2);border-radius:var(--r-card);padding:16px 20px;
+                   margin-bottom:12px;box-shadow:var(--neu-in);position:relative; }
+    .receipt-title { text-align:center;margin-bottom:12px; }
     .receipt-title span { background:var(--layer-1);color:var(--accent);padding:4px 16px;
                           border-radius:8px;font-size:12px;font-weight:700;letter-spacing:0.5px; }
+    .receipt-cutout { position:relative;height:2px;margin:0 -20px 14px;
+                      background:repeating-linear-gradient(90deg,#3a5e5e 0,#3a5e5e 8px,transparent 8px,transparent 16px); }
+    .receipt-cutout::before,.receipt-cutout::after { content:'';position:absolute;top:-8px;width:16px;height:16px;
+                      border-radius:50%;background:var(--layer-1); }
+    .receipt-cutout::before { left:-8px; }
+    .receipt-cutout::after { right:-8px; }
     .result-item { background:linear-gradient(135deg,var(--accent),var(--accent-dark));color:var(--layer-2);
                    border-radius:var(--r-sm);padding:12px 16px;margin-bottom:8px;
                    display:flex;justify-content:space-between;align-items:center;box-shadow:var(--neu-out); }

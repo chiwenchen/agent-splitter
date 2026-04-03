@@ -220,7 +220,7 @@ function App() {
           <input placeholder=${t.description} value=${formDesc} onInput=${e=>setFormDesc(e.target.value)} style="margin-bottom:8px" />
           <input placeholder=${t.amount} inputmode="decimal" value=${formAmt} onInput=${e=>setFormAmt(e.target.value)} style="margin-bottom:8px" />
           <select value=${formPayer} onChange=${e=>setFormPayer(e.target.value)} style="margin-bottom:8px">
-            ${names.map(n => html`<option key=${n}>${n}</option>`)}
+            ${names.map(n => html`<option key=${n} value=${n}>${n} ${t.paid}</option>`)}
           </select>
           <div class="section-title" style="margin-top:4px">${t.splitAmong}</div>
           <div class="checkbox-group">

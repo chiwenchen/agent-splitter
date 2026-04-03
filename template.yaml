@@ -123,6 +123,24 @@ Resources:
             Path: /docs
             Method: get
             ApiId: !Ref SplitSettleApi
+        Home:
+          Type: HttpApi
+          Properties:
+            Path: /
+            Method: get
+            ApiId: !Ref SplitSettleApi
+        ShareApi:
+          Type: HttpApi
+          Properties:
+            Path: /v1/share
+            Method: post
+            ApiId: !Ref SplitSettleApi
+        SharePage:
+          Type: HttpApi
+          Properties:
+            Path: /s/{id}
+            Method: get
+            ApiId: !Ref SplitSettleApi
 
 Outputs:
   ApiUrl:

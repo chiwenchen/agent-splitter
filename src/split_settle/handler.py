@@ -738,17 +738,13 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
                            animation:shimmerSweep 2.5s ease-in-out infinite;pointer-events:none; }
     @keyframes receiptFloat{0%{left:100%}100%{left:-200%}}
     button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-    /* Golden border orbit — #a style with wide bright band */
-    @property --orb-a { syntax:"<angle>"; inherits:false; initial-value:0deg; }
-    @keyframes orbA { to { --orb-a:360deg; } }
-    .input-orbit { position:relative;border-radius:14px; }
-    .input-orbit::before { content:'';position:absolute;inset:0;border-radius:14px;z-index:0;
-      background:conic-gradient(from var(--orb-a),
-        transparent 0%,transparent 40%,#c88830 50%,#ffd080 55%,#e8a84c 60%,#c88830 65%,transparent 75%);
-      animation:orbA 2.5s linear infinite; }
-    .input-orbit::after { content:'';position:absolute;inset:2px;border-radius:12px;
-      background:var(--layer-2);z-index:1; }
-    .input-orbit input { position:relative;z-index:2; }
+    /* Golden shimmer sweep on input border */
+    .input-orbit { position:relative;border-radius:14px;padding:2px;
+      background:var(--border);overflow:hidden; }
+    .input-orbit::before { content:'';position:absolute;top:0;left:-100%;width:60%;height:100%;
+      background:linear-gradient(90deg,transparent,#e8a84c,#ffd080,#e8a84c,transparent);
+      animation:shimmerSweep 2.5s ease-in-out infinite; }
+    .input-orbit input { position:relative;z-index:1;border-radius:12px; }
   </style>
   <script type="importmap">{"imports":{"preact":"https://esm.sh/preact@10.25.4","preact/hooks":"https://esm.sh/preact@10.25.4/hooks","htm/preact":"https://esm.sh/htm@3.1.1/preact?external=preact","react":"https://esm.sh/preact@10.25.4/compat","boring-avatars":"https://esm.sh/boring-avatars@1?external=react"}}</script>
 </head>

@@ -260,8 +260,8 @@ function App() {
             <button class="btn-outline" onClick=${()=>setShowForm(false)}>${t.cancel}</button>
           </div>
         </div>
-      ` : html`<button class="btn-outline ${(addHint||(firstExpenseHint&&names.length>=2&&expenses.length===0))?'btn-add-hint':''}"
-                  onClick=${()=>{setFirstExpenseHint(false);openForm()}} disabled=${names.length<2}>${t.addExpense}</button>`}
+      ` : html`<button class="btn-outline ${names.length>=2?'btn-add-hint':''}"
+                  onClick=${openForm} disabled=${names.length<2}>${t.addExpense}</button>`}
     </div>
 
     ${result && nSett > 0 ? html`

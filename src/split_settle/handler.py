@@ -738,27 +738,30 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
                            animation:shimmerSweep 2.5s ease-in-out infinite;pointer-events:none; }
     @keyframes receiptFloat{0%{left:100%}100%{left:-200%}}
     button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-    /* Golden light ball traveling along border */
-    .input-orbit { position:relative;border-radius:14px;padding:2px; }
-    .input-orbit::before { content:'';position:absolute;width:20px;height:20px;border-radius:50%;
-      background:radial-gradient(circle,#ffd080,#e8a84c 40%,transparent 70%);
-      box-shadow:0 0 12px 4px rgba(232,168,76,0.6),0 0 24px 8px rgba(232,168,76,0.3);
-      z-index:3;animation:orbitPath 3s linear infinite;pointer-events:none; }
+    /* Golden light traveling behind border slit */
+    .input-orbit { position:relative;border-radius:14px; }
+    .input-orbit::before { content:'';position:absolute;width:40px;height:40px;border-radius:50%;
+      background:radial-gradient(circle,#ffd080,#e8a84c 30%,rgba(232,168,76,0.4) 50%,transparent 70%);
+      filter:blur(3px);
+      z-index:0;animation:orbitPath 3s linear infinite;pointer-events:none; }
     .input-orbit::after { content:'';position:absolute;inset:0;border-radius:14px;
-      border:2px solid #3a5e5e;z-index:0; }
-    .input-orbit input { position:relative;z-index:1; }
+      background:var(--layer-1);
+      -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);
+      -webkit-mask-composite:xor;mask-composite:exclude;padding:2px;
+      z-index:1;pointer-events:none; }
+    .input-orbit input { position:relative;z-index:2; }
     @keyframes orbitPath {
-      0%   { top:-10px; left:14px; }
-      35%  { top:-10px; left:calc(100% - 34px); }
-      40%  { top:-4px;  left:calc(100% - 16px); }
-      45%  { top:calc(50% - 10px); left:calc(100% - 10px); }
-      50%  { top:calc(100% - 16px); left:calc(100% - 16px); }
-      55%  { top:calc(100% - 10px); left:calc(100% - 34px); }
-      85%  { top:calc(100% - 10px); left:14px; }
-      90%  { top:calc(100% - 16px); left:-4px; }
-      95%  { top:calc(50% - 10px); left:-10px; }
-      97%  { top:-4px; left:-4px; }
-      100% { top:-10px; left:14px; }
+      0%   { top:-18px; left:14px; }
+      35%  { top:-18px; left:calc(100% - 54px); }
+      40%  { top:-10px; left:calc(100% - 30px); }
+      45%  { top:calc(50% - 20px); left:calc(100% - 18px); }
+      50%  { top:calc(100% - 30px); left:calc(100% - 30px); }
+      55%  { top:calc(100% - 18px); left:calc(100% - 54px); }
+      85%  { top:calc(100% - 18px); left:14px; }
+      90%  { top:calc(100% - 30px); left:-10px; }
+      95%  { top:calc(50% - 20px); left:-18px; }
+      97%  { top:-10px; left:-10px; }
+      100% { top:-18px; left:14px; }
     }
   </style>
   <script type="importmap">{"imports":{"preact":"https://esm.sh/preact@10.25.4","preact/hooks":"https://esm.sh/preact@10.25.4/hooks","htm/preact":"https://esm.sh/htm@3.1.1/preact?external=preact","react":"https://esm.sh/preact@10.25.4/compat","boring-avatars":"https://esm.sh/boring-avatars@1?external=react"}}</script>

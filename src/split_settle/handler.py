@@ -738,16 +738,31 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
                            animation:shimmerSweep 2.5s ease-in-out infinite;pointer-events:none; }
     @keyframes receiptFloat{0%{left:100%}100%{left:-200%}}
     button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-    /* Golden border orbit animation */
-    @keyframes orbitSpin { to { transform:rotate(360deg); } }
-    .input-orbit { position:relative;border-radius:14px;overflow:hidden;padding:2px; }
-    .input-orbit::before { content:'';position:absolute;
-      top:50%;left:50%;width:200%;height:200%;
-      transform-origin:center;
-      background:conic-gradient(from 0deg,transparent 0%,transparent 70%,#e8a84c 80%,#ffd080 85%,#e8a84c 90%,transparent 100%);
-      animation:orbitSpin 2.5s linear infinite; }
-    .input-orbit::after { content:'';position:absolute;inset:2px;border-radius:12px;background:var(--layer-2);z-index:0; }
-    .input-orbit input { position:relative;z-index:1;border-radius:12px; }
+    /* Golden border orbit — light travels along the border */
+    @property --orbit-r { syntax:'<angle>'; inherits:false; initial-value:0deg; }
+    @property --orbit-x { syntax:'<length>'; inherits:false; initial-value:0px; }
+    .input-orbit { position:relative;border-radius:14px; }
+    .input-orbit::before { content:'';position:absolute;inset:0;border-radius:14px;
+      background:conic-gradient(from calc(var(--orbit-r) - 80deg) at var(--orbit-x) 50%,
+        #1e3636 0%,#ffd080 10%,#e8a84c 15%,#1e3636 25%);
+      animation:-0.64s orbitR 3s linear infinite, -0.64s orbitX 3s linear infinite; }
+    .input-orbit::after { content:'';position:absolute;inset:2px;border-radius:12px;background:var(--layer-2);z-index:1; }
+    .input-orbit input { position:relative;z-index:2; }
+    /* ratio ~8:1 (wide input), margins 14px */
+    @keyframes orbitX {
+      0%   { --orbit-x:14px; }
+      35%  { --orbit-x:calc(100% - 14px); }
+      50%  { --orbit-x:calc(100% - 14px); }
+      85%  { --orbit-x:14px; }
+      100% { --orbit-x:14px; }
+    }
+    @keyframes orbitR {
+      0%   { --orbit-r:0deg; }
+      35%  { --orbit-r:0deg; }
+      50%  { --orbit-r:180deg; }
+      85%  { --orbit-r:180deg; }
+      100% { --orbit-r:360deg; }
+    }
   </style>
   <script type="importmap">{"imports":{"preact":"https://esm.sh/preact@10.25.4","preact/hooks":"https://esm.sh/preact@10.25.4/hooks","htm/preact":"https://esm.sh/htm@3.1.1/preact?external=preact","react":"https://esm.sh/preact@10.25.4/compat","boring-avatars":"https://esm.sh/boring-avatars@1?external=react"}}</script>
 </head>

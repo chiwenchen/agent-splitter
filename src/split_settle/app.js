@@ -9,7 +9,7 @@ const i18n = {
   en: {
     title:'Split Senpai', subtitle:'Split expenses instantly. No registration needed.',
     participants:'Participants', addName:'Add a name...', expenses:'Expenses',
-    addExpense:'+ Add Expense', description:'Description (optional)', amount:'Amount',
+    addExpense:'+ Add Expense', description:'Item description (optional)', amount:'Amount',
     splitAmong:'Split among', add:'Add', cancel:'Cancel',
     settlement:'Settlement', owes:'→', total:'total',
     transfer:'transfer', transfers:'transfers', toSettle:'to settle',
@@ -21,7 +21,7 @@ const i18n = {
   'zh-TW': {
     title:'分帳仙貝', subtitle:'秒算分帳，免註冊、免下載',
     participants:'參加者', addName:'輸入名字...', expenses:'帳單',
-    addExpense:'+ 新增帳單', description:'說明（選填）', amount:'金額',
+    addExpense:'+ 新增帳單', description:'品項說明（選填）', amount:'金額',
     splitAmong:'分給誰', add:'新增', cancel:'取消',
     settlement:'結算', owes:'→', total:'總計',
     transfer:'筆轉帳', transfers:'筆轉帳', toSettle:'即可結清',
@@ -33,7 +33,7 @@ const i18n = {
   ja: {
     title:'割り勘先輩', subtitle:'割り勘を即計算。登録不要。',
     participants:'参加者', addName:'名前を入力...', expenses:'支出',
-    addExpense:'+ 支出を追加', description:'説明（任意）', amount:'金額',
+    addExpense:'+ 支出を追加', description:'品目の説明（任意）', amount:'金額',
     splitAmong:'割り勘メンバー', add:'追加', cancel:'キャンセル',
     settlement:'精算', owes:'→', total:'合計',
     transfer:'件の送金', transfers:'件の送金', toSettle:'で精算完了',
@@ -300,13 +300,13 @@ function App() {
       `)}
       ${showForm ? html`
         <div class="add-form">
+          <select value=${formPayer} onChange=${e=>setFormPayer(e.target.value)} style="margin-bottom:8px">
+            ${names.map(n=>html`<option key=${n} value=${n}>${n} ${t.paid}</option>`)}
+          </select>
           <input placeholder=${t.description} value=${formDesc} onInput=${e=>setFormDesc(e.target.value)} style="margin-bottom:8px"
             onKeyDown=${e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('amt-input')?.focus()}}} />
           <input id="amt-input" placeholder=${t.amount} inputmode="none" value=${formAmt} onInput=${e=>setFormAmt(e.target.value)} style="margin-bottom:0" readonly />
           <${CalcPad} value=${formAmt} onChange=${v=>setFormAmt(v)} />
-          <select value=${formPayer} onChange=${e=>setFormPayer(e.target.value)} style="margin-bottom:8px">
-            ${names.map(n=>html`<option key=${n} value=${n}>${n} ${t.paid}</option>`)}
-          </select>
           <div class="section-title" style="margin-top:4px">${t.splitAmong}</div>
           <div class="checkbox-group">
             ${names.map(n=>html`<label key=${n}><input type="checkbox" checked=${formSplit.includes(n)} onChange=${()=>toggleSplit(n)} />${n}</label>`)}

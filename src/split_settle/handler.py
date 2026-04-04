@@ -621,6 +621,7 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
       --neu-in:inset -3px 3px 6px rgba(10,30,30,0.5),inset 3px -3px 6px rgba(60,100,100,0.15);
     }
     * { margin:0;padding:0;box-sizing:border-box; }
+    button,select,input { touch-action:manipulation; }
     body { font-family:'Inter',-apple-system,system-ui,sans-serif; background:var(--layer-0);
            min-height:100vh; display:flex; justify-content:center; padding:16px; }
     .container { width:100%; max-width:420px; background:var(--layer-1); border-radius:var(--r-outer);
@@ -709,6 +710,10 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
                    padding:12px 20px;font-size:14px;font-weight:700;cursor:grab;z-index:2;
                    box-shadow:var(--neu-out);white-space:nowrap;transition:none;min-width:140px;text-align:center; }
     .confirm-btn:active { cursor:grabbing; }
+    .dot-loading span { animation:dotBounce 1.2s infinite; display:inline-block; }
+    .dot-loading span:nth-child(2) { animation-delay:0.2s; }
+    .dot-loading span:nth-child(3) { animation-delay:0.4s; }
+    @keyframes dotBounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-4px)} }
     .confirm-arrows { display:flex;align-items:center;margin-left:12px; }
     .arrow-icon { width:20px;height:20px;color:var(--text-dim);margin-left:-6px;
                   animation:arrowFlow 2s infinite;opacity:0; }
@@ -742,8 +747,9 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
     .calc-pad { display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px;margin-bottom:8px; }
     .calc-key { background:var(--layer-1);color:var(--text-on-dark);border:none;border-radius:8px;
                 padding:10px 0;font-size:16px;font-weight:600;cursor:pointer;
-                box-shadow:var(--neu-out);transition:transform 0.1s; }
-    .calc-key:active { transform:scale(0.95);box-shadow:var(--neu-in); }
+                box-shadow:var(--neu-out);transition:transform 0.1s;
+                touch-action:manipulation;-webkit-tap-highlight-color:transparent; }
+    .calc-key:active, .calc-key-pressed { transform:scale(0.88);box-shadow:var(--neu-in);background:var(--layer-2);transition:transform 0.05s; }
     .calc-key-op { color:var(--accent); }
     .calc-key-eq { background:var(--accent);color:var(--layer-2); }
     .calc-key-del { font-size:13px;color:var(--text-muted); }
@@ -753,13 +759,12 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
     /* Haptic shake */
     @keyframes hapticShake {
       0%,100% { transform:translateX(0); }
-      10% { transform:translateX(-2px) rotate(-0.5deg); }
-      20% { transform:translateX(2px) rotate(0.5deg); }
-      30% { transform:translateX(-1px); }
+      20% { transform:translateX(-1px); }
       40% { transform:translateX(1px); }
-      50% { transform:translateX(0); }
+      60% { transform:translateX(-0.5px); }
+      80% { transform:translateX(0); }
     }
-    .haptic { animation:hapticShake 0.4s ease; }
+    .haptic { animation:hapticShake 0.2s ease !important; }
     /* Golden shimmer sweep on input border */
     .input-orbit { position:relative;border-radius:14px;padding:2px;
       background:var(--border);overflow:hidden; }
@@ -1053,8 +1058,9 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
               font-size:12px;font-weight:600;cursor:pointer;
               box-shadow:4px 4px 8px rgba(10,30,30,0.4),-2px -2px 4px rgba(60,100,100,0.1); }
     .me-btn.active { background:#e8a84c;color:#1e3636; }
-    .settlement.dimmed { opacity:0.3;transform:scale(0.97);filter:grayscale(0.5); }
-    .settlement { transition:opacity 0.3s,transform 0.3s,filter 0.3s; }
+    .settlement { transition:all 0.35s cubic-bezier(0.4,0,0.2,1);
+                  max-height:80px;overflow:hidden;margin-bottom:8px;opacity:1;transform:translateX(0); }
+    .settlement.hidden { max-height:0;opacity:0;transform:translateX(-40px);margin-bottom:0;padding-top:0;padding-bottom:0; }
   </style>
 </head>
 <body>
@@ -1081,9 +1087,9 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
   function filterMe(name) {
     document.querySelectorAll('.me-btn').forEach(b => b.classList.toggle('active', b.dataset.name === name || (!name && !b.dataset.name)));
     document.querySelectorAll('.settlement').forEach(s => {
-      if (!name) { s.classList.remove('dimmed'); return; }
+      if (!name) { s.classList.remove('hidden'); return; }
       const text = s.textContent;
-      s.classList.toggle('dimmed', !text.includes(name));
+      s.classList.toggle('hidden', !text.includes(name));
     });
   }
   </script>
@@ -1091,35 +1097,40 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
 </html>"""
 
 
+def _esc(s: str) -> str:
+    """HTML-escape user input to prevent XSS."""
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#x27;")
+
+
 def _render_share_page(result: dict, created_at: str = "", si: dict = None) -> str:
     """Render the share page HTML from a split result."""
-    currency = result.get("currency", "")
+    currency = _esc(result.get("currency", ""))
     total = result.get("total_expenses", 0)
     settlements = result.get("settlements", [])
     summary = result.get("summary", [])
-    names = [s["participant"] for s in summary]
+    names = [_esc(s["participant"]) for s in summary]
     n_sett = len(settlements)
 
     settlements_html = ""
     for i, s in enumerate(settlements):
         settlements_html += (
             f'<div class="settlement" style="--i:{i}">'
-            f'<span><span class="from">{s["from"]}</span> → '
-            f'<span class="to">{s["to"]}</span></span>'
+            f'<span><span class="from">{_esc(s["from"])}</span> → '
+            f'<span class="to">{_esc(s["to"])}</span></span>'
             f'<span class="amount">{currency} {s["amount"]:,.2f}</span>'
             f'</div>'
         )
 
     me_buttons = ""
     for name in names:
-        me_buttons += f'<button class="me-btn" data-name="{name}" onclick="filterMe(\'{name}\')">{name}</button>'
+        me_buttons += f'<button class="me-btn" data-name="{name}" onclick="filterMe(&#x27;{name}&#x27;)">{name}</button>'
 
     s_plural = "s" if n_sett != 1 else ""
     replacements = {
         "{{title}}": f"{currency} {total:,.0f} split",
         "{{og_title}}": f"Split: {currency} {total:,.0f} between {len(names)} people",
         "{{og_desc}}": f"{n_sett} transfer{s_plural} needed to settle",
-        "{{date}}": created_at[:10] if created_at else "",
+        "{{date}}": _esc(created_at[:10]) if created_at else "",
         "{{participants}}": ", ".join(names),
         "{{currency}}": currency,
         "{{total}}": f"{total:,.2f}",
@@ -1371,6 +1382,11 @@ def split_settle(data: dict) -> dict:
         raise ValueError("at least 2 participants required")
     if len(participants) > 20:
         raise ValueError("participants cannot exceed 20")
+    if len(set(participants)) != len(participants):
+        raise ValueError("duplicate participant names not allowed")
+    for p in participants:
+        if len(p) > 50:
+            raise ValueError(f"participant name too long: max 50 chars")
     if len(expenses) < 1:
         raise ValueError("at least 1 expense required")
 

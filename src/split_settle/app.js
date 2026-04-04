@@ -9,7 +9,7 @@ const i18n = {
   en: {
     title:'Split Senpai', subtitle:'Split expenses instantly. No registration needed.',
     participants:'Participants', addName:'Add a name...', expenses:'Expenses',
-    addExpense:'+ Add Expense', description:'Description (optional)', amount:'Amount',
+    addExpense:'+ Add Expense', description:'Item description (optional)', amount:'Amount',
     splitAmong:'Split among', add:'Add', cancel:'Cancel',
     settlement:'Settlement', owes:'→', total:'total',
     transfer:'transfer', transfers:'transfers', toSettle:'to settle',
@@ -21,7 +21,7 @@ const i18n = {
   'zh-TW': {
     title:'分帳仙貝', subtitle:'秒算分帳，免註冊、免下載',
     participants:'參加者', addName:'輸入名字...', expenses:'帳單',
-    addExpense:'+ 新增帳單', description:'說明（選填）', amount:'金額',
+    addExpense:'+ 新增帳單', description:'品項說明（選填）', amount:'金額',
     splitAmong:'分給誰', add:'新增', cancel:'取消',
     settlement:'結算', owes:'→', total:'總計',
     transfer:'筆轉帳', transfers:'筆轉帳', toSettle:'即可結清',
@@ -33,7 +33,7 @@ const i18n = {
   ja: {
     title:'割り勘先輩', subtitle:'割り勘を即計算。登録不要。',
     participants:'参加者', addName:'名前を入力...', expenses:'支出',
-    addExpense:'+ 支出を追加', description:'説明（任意）', amount:'金額',
+    addExpense:'+ 支出を追加', description:'品目の説明（任意）', amount:'金額',
     splitAmong:'割り勘メンバー', add:'追加', cancel:'キャンセル',
     settlement:'精算', owes:'→', total:'合計',
     transfer:'件の送金', transfers:'件の送金', toSettle:'で精算完了',
@@ -87,9 +87,15 @@ function CalcPad({value, onChange}) {
     onChange(value + k);
   }
   const keys = ['7','8','9','+','4','5','6','-','1','2','3','*','C','0','.','='];
+  function tap(e, k) {
+    const btn = e.currentTarget;
+    btn.classList.add('calc-key-pressed');
+    setTimeout(() => btn.classList.remove('calc-key-pressed'), 150);
+    press(k);
+  }
   return html`<div class="calc-pad">
     ${keys.map(k => html`<button key=${k} class="calc-key ${['+','-','*'].includes(k)?'calc-key-op':''} ${k==='='?'calc-key-eq':''} ${k==='C'?'calc-key-del':''}"
-      onClick=${()=>press(k)} type="button">${k === 'C' ? '⌫' : k}</button>`)}
+      onClick=${e=>tap(e,k)} type="button">${k === 'C' ? '⌫' : k}</button>`)}
   </div>`;
 }
 
@@ -126,7 +132,7 @@ function SlideConfirm({label, onConfirm, disabled}) {
       setX(getMax());
       setDone(true);
       haptic();
-      onConfirm && onConfirm();
+      setTimeout(() => onConfirm && onConfirm(), 400);
     } else {
       setX(0);
     }
@@ -145,7 +151,7 @@ function SlideConfirm({label, onConfirm, disabled}) {
         onMouseDown=${e => start(e.clientX)}
         onTouchStart=${e => start(e.touches[0].clientX)}
         disabled=${disabled}>
-        ${done ? '✓' : label}
+        ${done ? html`<span class="dot-loading"><span>·</span><span>·</span><span>·</span></span>` : label}
       </button>
       ${!done ? html`<div class="confirm-arrows" style="opacity:${1 - progress}">
         <${ArrowIcon}/><${ArrowIcon}/><${ArrowIcon}/><${ArrowIcon}/><${ArrowIcon}/>
@@ -233,8 +239,15 @@ function App() {
     } catch(e){setError(e.message);} setSharing(false);
   }
   const [copied, setCopied] = useState(false);
-  async function copyLink(){
-    try{await navigator.clipboard.writeText(shareUrl);setCopied(true);haptic();setTimeout(()=>setCopied(false),1500);}catch(e){}
+  function copyLink(){
+    // Use sync fallback first (works on first click, no permission needed)
+    const ta=document.createElement('textarea');ta.value=shareUrl;ta.style.cssText='position:fixed;left:-9999px;opacity:0';
+    document.body.appendChild(ta);ta.focus();ta.select();
+    try{document.execCommand('copy')}catch(e){}
+    document.body.removeChild(ta);
+    // Also try async clipboard API (for future pastes)
+    try{navigator.clipboard?.writeText(shareUrl)}catch(e){}
+    setCopied(true);haptic();setTimeout(()=>setCopied(false),1500);
   }
   function webShare(){if(navigator.share)navigator.share({title:'SplitSettle',text:t.shareResults,url:shareUrl})}
 
@@ -257,7 +270,8 @@ function App() {
       </div>
       <div style="margin-top:10px" class="${names.length<2?'input-orbit':''}">
         <input placeholder=${t.addName} value=${newName} onInput=${e=>setNewName(e.target.value)}
-          onKeyDown=${e=>{if(e.key==='Enter'&&!e.isComposing&&!e.nativeEvent?.isComposing)addName()}} />
+          onKeyDown=${e=>{if(e.key==='Enter'&&!e.isComposing&&!e.nativeEvent?.isComposing)addName()}}
+          onBlur=${()=>{setTimeout(addName,100)}} />
       </div>
     </div>
 
@@ -286,13 +300,13 @@ function App() {
       `)}
       ${showForm ? html`
         <div class="add-form">
-          <input placeholder=${t.description} value=${formDesc} onInput=${e=>setFormDesc(e.target.value)} style="margin-bottom:8px"
-            onKeyDown=${e=>{if(e.key==='Enter'){e.preventDefault();e.target.parentElement.querySelector('[inputmode="decimal"]').focus()}}} />
-          <input id="amt-input" placeholder=${t.amount} inputmode="none" value=${formAmt} onInput=${e=>setFormAmt(e.target.value)} style="margin-bottom:0" readonly />
-          <${CalcPad} value=${formAmt} onChange=${v=>setFormAmt(v)} />
           <select value=${formPayer} onChange=${e=>setFormPayer(e.target.value)} style="margin-bottom:8px">
             ${names.map(n=>html`<option key=${n} value=${n}>${n} ${t.paid}</option>`)}
           </select>
+          <input placeholder=${t.description} value=${formDesc} onInput=${e=>setFormDesc(e.target.value)} style="margin-bottom:8px"
+            onKeyDown=${e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('amt-input')?.focus()}}} />
+          <input id="amt-input" placeholder=${t.amount} inputmode="none" value=${formAmt} onInput=${e=>setFormAmt(e.target.value)} style="margin-bottom:0" readonly />
+          <${CalcPad} value=${formAmt} onChange=${v=>setFormAmt(v)} />
           <div class="section-title" style="margin-top:4px">${t.splitAmong}</div>
           <div class="checkbox-group">
             ${names.map(n=>html`<label key=${n}><input type="checkbox" checked=${formSplit.includes(n)} onChange=${()=>toggleSplit(n)} />${n}</label>`)}

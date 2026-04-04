@@ -126,7 +126,7 @@ function SlideConfirm({label, onConfirm, disabled}) {
       setX(getMax());
       setDone(true);
       haptic();
-      onConfirm && onConfirm();
+      setTimeout(() => onConfirm && onConfirm(), 400);
     } else {
       setX(0);
     }

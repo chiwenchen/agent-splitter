@@ -755,16 +755,12 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
     /* Haptic shake */
     @keyframes hapticShake {
       0%,100% { transform:translateX(0); }
-      10% { transform:translateX(-4px) rotate(-0.5deg); }
-      20% { transform:translateX(4px) rotate(0.5deg); }
-      30% { transform:translateX(-3px) rotate(-0.3deg); }
-      40% { transform:translateX(3px) rotate(0.3deg); }
-      50% { transform:translateX(-2px); }
-      60% { transform:translateX(2px); }
-      70% { transform:translateX(-1px); }
+      20% { transform:translateX(-1px); }
+      40% { transform:translateX(1px); }
+      60% { transform:translateX(-0.5px); }
       80% { transform:translateX(0); }
     }
-    .haptic { animation:hapticShake 0.5s ease !important; }
+    .haptic { animation:hapticShake 0.2s ease !important; }
     /* Golden shimmer sweep on input border */
     .input-orbit { position:relative;border-radius:14px;padding:2px;
       background:var(--border);overflow:hidden; }

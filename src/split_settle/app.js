@@ -87,9 +87,15 @@ function CalcPad({value, onChange}) {
     onChange(value + k);
   }
   const keys = ['7','8','9','+','4','5','6','-','1','2','3','*','C','0','.','='];
+  function tap(e, k) {
+    const btn = e.currentTarget;
+    btn.classList.add('calc-key-pressed');
+    setTimeout(() => btn.classList.remove('calc-key-pressed'), 150);
+    press(k);
+  }
   return html`<div class="calc-pad">
     ${keys.map(k => html`<button key=${k} class="calc-key ${['+','-','*'].includes(k)?'calc-key-op':''} ${k==='='?'calc-key-eq':''} ${k==='C'?'calc-key-del':''}"
-      onClick=${()=>press(k)} type="button">${k === 'C' ? '⌫' : k}</button>`)}
+      onClick=${e=>tap(e,k)} type="button">${k === 'C' ? '⌫' : k}</button>`)}
   </div>`;
 }
 

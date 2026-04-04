@@ -745,7 +745,7 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
                 padding:10px 0;font-size:16px;font-weight:600;cursor:pointer;
                 box-shadow:var(--neu-out);transition:transform 0.1s;
                 touch-action:manipulation;-webkit-tap-highlight-color:transparent; }
-    .calc-key:active { transform:scale(0.88);box-shadow:var(--neu-in);background:var(--layer-2);transition:transform 0.05s; }
+    .calc-key:active, .calc-key-pressed { transform:scale(0.88);box-shadow:var(--neu-in);background:var(--layer-2);transition:transform 0.05s; }
     .calc-key-op { color:var(--accent); }
     .calc-key-eq { background:var(--accent);color:var(--layer-2); }
     .calc-key-del { font-size:13px;color:var(--text-muted); }

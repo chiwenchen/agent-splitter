@@ -621,6 +621,7 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
       --neu-in:inset -3px 3px 6px rgba(10,30,30,0.5),inset 3px -3px 6px rgba(60,100,100,0.15);
     }
     * { margin:0;padding:0;box-sizing:border-box; }
+    button,select,input { touch-action:manipulation; }
     body { font-family:'Inter',-apple-system,system-ui,sans-serif; background:var(--layer-0);
            min-height:100vh; display:flex; justify-content:center; padding:16px; }
     .container { width:100%; max-width:420px; background:var(--layer-1); border-radius:var(--r-outer);
@@ -742,7 +743,8 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
     .calc-pad { display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px;margin-bottom:8px; }
     .calc-key { background:var(--layer-1);color:var(--text-on-dark);border:none;border-radius:8px;
                 padding:10px 0;font-size:16px;font-weight:600;cursor:pointer;
-                box-shadow:var(--neu-out);transition:transform 0.1s; }
+                box-shadow:var(--neu-out);transition:transform 0.1s;
+                touch-action:manipulation;-webkit-tap-highlight-color:transparent; }
     .calc-key:active { transform:scale(0.95);box-shadow:var(--neu-in); }
     .calc-key-op { color:var(--accent); }
     .calc-key-eq { background:var(--accent);color:var(--layer-2); }

@@ -292,7 +292,7 @@ function App() {
       ${showForm ? html`
         <div class="add-form">
           <input placeholder=${t.description} value=${formDesc} onInput=${e=>setFormDesc(e.target.value)} style="margin-bottom:8px"
-            onKeyDown=${e=>{if(e.key==='Enter'){e.preventDefault();e.target.parentElement.querySelector('[inputmode="decimal"]').focus()}}} />
+            onKeyDown=${e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('amt-input')?.focus()}}} />
           <input id="amt-input" placeholder=${t.amount} inputmode="none" value=${formAmt} onInput=${e=>setFormAmt(e.target.value)} style="margin-bottom:0" readonly />
           <${CalcPad} value=${formAmt} onChange=${v=>setFormAmt(v)} />
           <select value=${formPayer} onChange=${e=>setFormPayer(e.target.value)} style="margin-bottom:8px">

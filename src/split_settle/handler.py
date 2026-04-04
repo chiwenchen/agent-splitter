@@ -1096,35 +1096,40 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
 </html>"""
 
 
+def _esc(s: str) -> str:
+    """HTML-escape user input to prevent XSS."""
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#x27;")
+
+
 def _render_share_page(result: dict, created_at: str = "", si: dict = None) -> str:
     """Render the share page HTML from a split result."""
-    currency = result.get("currency", "")
+    currency = _esc(result.get("currency", ""))
     total = result.get("total_expenses", 0)
     settlements = result.get("settlements", [])
     summary = result.get("summary", [])
-    names = [s["participant"] for s in summary]
+    names = [_esc(s["participant"]) for s in summary]
     n_sett = len(settlements)
 
     settlements_html = ""
     for i, s in enumerate(settlements):
         settlements_html += (
             f'<div class="settlement" style="--i:{i}">'
-            f'<span><span class="from">{s["from"]}</span> → '
-            f'<span class="to">{s["to"]}</span></span>'
+            f'<span><span class="from">{_esc(s["from"])}</span> → '
+            f'<span class="to">{_esc(s["to"])}</span></span>'
             f'<span class="amount">{currency} {s["amount"]:,.2f}</span>'
             f'</div>'
         )
 
     me_buttons = ""
     for name in names:
-        me_buttons += f'<button class="me-btn" data-name="{name}" onclick="filterMe(\'{name}\')">{name}</button>'
+        me_buttons += f'<button class="me-btn" data-name="{name}" onclick="filterMe(&#x27;{name}&#x27;)">{name}</button>'
 
     s_plural = "s" if n_sett != 1 else ""
     replacements = {
         "{{title}}": f"{currency} {total:,.0f} split",
         "{{og_title}}": f"Split: {currency} {total:,.0f} between {len(names)} people",
         "{{og_desc}}": f"{n_sett} transfer{s_plural} needed to settle",
-        "{{date}}": created_at[:10] if created_at else "",
+        "{{date}}": _esc(created_at[:10]) if created_at else "",
         "{{participants}}": ", ".join(names),
         "{{currency}}": currency,
         "{{total}}": f"{total:,.2f}",
@@ -1376,6 +1381,11 @@ def split_settle(data: dict) -> dict:
         raise ValueError("at least 2 participants required")
     if len(participants) > 20:
         raise ValueError("participants cannot exceed 20")
+    if len(set(participants)) != len(participants):
+        raise ValueError("duplicate participant names not allowed")
+    for p in participants:
+        if len(p) > 50:
+            raise ValueError(f"participant name too long: max 50 chars")
     if len(expenses) < 1:
         raise ValueError("at least 1 expense required")
 

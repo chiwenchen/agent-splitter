@@ -922,13 +922,13 @@ def test_agent_api_still_requires_auth(monkeypatch):
 # Edge case tests
 # ---------------------------------------------------------------------------
 
-def test_duplicate_participant_name():
-    """Same name twice should still work (backend doesn't deduplicate, frontend does)."""
-    result = handler.split_settle({
-        "currency": "TWD", "participants": ["Alice", "Alice", "Bob"],
-        "expenses": [{"paid_by": "Alice", "amount": 300, "split_among": ["Alice", "Alice", "Bob"]}],
-    })
-    assert result["total_expenses"] == 300
+def test_duplicate_participant_name_rejected():
+    """Duplicate names should be rejected."""
+    with pytest.raises(ValueError, match="duplicate"):
+        handler.split_settle({
+            "currency": "TWD", "participants": ["Alice", "Alice", "Bob"],
+            "expenses": [{"paid_by": "Alice", "amount": 300, "split_among": ["Alice", "Bob"]}],
+        })
 
 
 def test_emoji_participant_name():
@@ -951,14 +951,23 @@ def test_special_chars_in_name():
     assert result["num_settlements"] == 1
 
 
-def test_very_long_name():
-    """50+ char name should work."""
-    long_name = "A" * 60
+def test_name_at_limit():
+    """50 char name should work."""
+    name_50 = "A" * 50
     result = handler.split_settle({
-        "currency": "USD", "participants": [long_name, "B"],
-        "expenses": [{"paid_by": long_name, "amount": 100, "split_among": [long_name, "B"]}],
+        "currency": "USD", "participants": [name_50, "B"],
+        "expenses": [{"paid_by": name_50, "amount": 100, "split_among": [name_50, "B"]}],
     })
-    assert result["settlements"][0]["to"] == long_name
+    assert result["settlements"][0]["to"] == name_50
+
+
+def test_name_over_limit_rejected():
+    """51+ char name should be rejected."""
+    with pytest.raises(ValueError, match="too long"):
+        handler.split_settle({
+            "currency": "USD", "participants": ["A" * 51, "B"],
+            "expenses": [{"paid_by": "A" * 51, "amount": 100, "split_among": ["A" * 51, "B"]}],
+        })
 
 
 def test_zero_amount_rejected():
@@ -1079,6 +1088,21 @@ def test_share_page_no_id():
     event = {"rawPath": "/s/", "requestContext": {"http": {"method": "GET"}}, "headers": {}}
     response = lambda_handler(event, {})
     assert response["statusCode"] == 404
+
+
+def test_share_page_xss_prevention(share_env):
+    """Names with <script> should be HTML-escaped in share page."""
+    _fake_share_save("xss-test", {"currency": "USD"}, {
+        "currency": "USD", "total_expenses": 100,
+        "settlements": [{"from": "<script>alert(1)</script>", "to": "Bob", "amount": 50}],
+        "summary": [{"participant": "<script>alert(1)</script>"}, {"participant": "Bob"}],
+        "num_settlements": 1,
+    })
+    event = {"rawPath": "/s/xss-test", "requestContext": {"http": {"method": "GET"}}, "headers": {}}
+    response = lambda_handler(event, {})
+    body = response["body"]
+    assert "<script>alert(1)</script>" not in body  # user input must be escaped
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in body  # should show escaped version
 
 
 def test_share_page_special_chars_id(share_env):

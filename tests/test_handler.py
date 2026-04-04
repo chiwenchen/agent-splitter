@@ -919,6 +919,176 @@ def test_agent_api_still_requires_auth(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Edge case tests
+# ---------------------------------------------------------------------------
+
+def test_duplicate_participant_name():
+    """Same name twice should still work (backend doesn't deduplicate, frontend does)."""
+    result = handler.split_settle({
+        "currency": "TWD", "participants": ["Alice", "Alice", "Bob"],
+        "expenses": [{"paid_by": "Alice", "amount": 300, "split_among": ["Alice", "Alice", "Bob"]}],
+    })
+    assert result["total_expenses"] == 300
+
+
+def test_emoji_participant_name():
+    """Emoji names should work fine."""
+    result = handler.split_settle({
+        "currency": "TWD", "participants": ["👻", "🎃"],
+        "expenses": [{"paid_by": "👻", "amount": 100, "split_among": ["👻", "🎃"]}],
+    })
+    assert result["num_settlements"] == 1
+    assert result["settlements"][0]["from"] == "🎃"
+    assert result["settlements"][0]["to"] == "👻"
+
+
+def test_special_chars_in_name():
+    """Names with HTML-like chars should not break."""
+    result = handler.split_settle({
+        "currency": "USD", "participants": ["<script>alert</script>", "Bob"],
+        "expenses": [{"paid_by": "<script>alert</script>", "amount": 50, "split_among": ["<script>alert</script>", "Bob"]}],
+    })
+    assert result["num_settlements"] == 1
+
+
+def test_very_long_name():
+    """50+ char name should work."""
+    long_name = "A" * 60
+    result = handler.split_settle({
+        "currency": "USD", "participants": [long_name, "B"],
+        "expenses": [{"paid_by": long_name, "amount": 100, "split_among": [long_name, "B"]}],
+    })
+    assert result["settlements"][0]["to"] == long_name
+
+
+def test_zero_amount_rejected():
+    """Amount 0 should be rejected."""
+    with pytest.raises(ValueError):
+        handler.split_settle({
+            "currency": "TWD", "participants": ["A", "B"],
+            "expenses": [{"paid_by": "A", "amount": 0, "split_among": ["A", "B"]}],
+        })
+
+
+def test_negative_amount_rejected():
+    """Negative amount should be rejected."""
+    with pytest.raises(ValueError):
+        handler.split_settle({
+            "currency": "TWD", "participants": ["A", "B"],
+            "expenses": [{"paid_by": "A", "amount": -50, "split_among": ["A", "B"]}],
+        })
+
+
+def test_very_large_amount():
+    """Very large amount should not overflow."""
+    result = handler.split_settle({
+        "currency": "TWD", "participants": ["A", "B"],
+        "expenses": [{"paid_by": "A", "amount": 999999999, "split_among": ["A", "B"]}],
+    })
+    assert result["total_expenses"] == 999999999
+    assert result["settlements"][0]["amount"] == 499999999.5
+
+
+def test_decimal_amount():
+    """Decimal amounts should work with cent precision."""
+    result = handler.split_settle({
+        "currency": "USD", "participants": ["A", "B"],
+        "expenses": [{"paid_by": "A", "amount": 33.33, "split_among": ["A", "B"]}],
+    })
+    assert result["total_expenses"] == 33.33
+
+
+def test_indivisible_amount_three_ways():
+    """100 / 3 = 33.33... — remainder should be distributed."""
+    result = handler.split_settle({
+        "currency": "TWD", "participants": ["A", "B", "C"],
+        "expenses": [{"paid_by": "A", "amount": 100, "split_among": ["A", "B", "C"]}],
+    })
+    total_owed = sum(s["total_owed"] for s in result["summary"])
+    assert round(total_owed * 100) == 10000  # cents add up exactly
+
+
+def test_split_among_only_self():
+    """Splitting only among the payer means no settlements needed."""
+    result = handler.split_settle({
+        "currency": "TWD", "participants": ["A", "B"],
+        "expenses": [{"paid_by": "A", "amount": 100, "split_among": ["A"]}],
+    })
+    assert result["num_settlements"] == 0
+
+
+def test_all_expenses_same_payer():
+    """All expenses paid by one person, split among all."""
+    result = handler.split_settle({
+        "currency": "TWD", "participants": ["A", "B", "C"],
+        "expenses": [
+            {"paid_by": "A", "amount": 300, "split_among": ["A", "B", "C"]},
+            {"paid_by": "A", "amount": 150, "split_among": ["A", "B", "C"]},
+        ],
+    })
+    assert result["total_expenses"] == 450
+    assert result["num_settlements"] == 2
+    # B and C each owe A
+    for s in result["settlements"]:
+        assert s["to"] == "A"
+
+
+def test_already_balanced_no_settlements():
+    """Everyone paid their own share — 0 settlements."""
+    result = handler.split_settle({
+        "currency": "TWD", "participants": ["A", "B"],
+        "expenses": [
+            {"paid_by": "A", "amount": 100, "split_among": ["A"]},
+            {"paid_by": "B", "amount": 100, "split_among": ["B"]},
+        ],
+    })
+    assert result["num_settlements"] == 0
+
+
+def test_max_participants_20():
+    """20 participants should work (upper limit)."""
+    names = [f"P{i}" for i in range(20)]
+    result = handler.split_settle({
+        "currency": "TWD", "participants": names,
+        "expenses": [{"paid_by": "P0", "amount": 2000, "split_among": names}],
+    })
+    assert result["total_expenses"] == 2000
+    assert len(result["summary"]) == 20
+
+
+def test_21_participants_rejected():
+    """21 participants should be rejected."""
+    names = [f"P{i}" for i in range(21)]
+    with pytest.raises(ValueError, match="20"):
+        handler.split_settle({
+            "currency": "TWD", "participants": names,
+            "expenses": [{"paid_by": "P0", "amount": 100, "split_among": names}],
+        })
+
+
+def test_share_empty_body(share_env):
+    """POST /v1/share with empty body should 400."""
+    event = {"rawPath": "/v1/share", "requestContext": {"http": {"method": "POST"}},
+             "headers": {}, "body": "{}"}
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 400
+
+
+def test_share_page_no_id():
+    """GET /s/ with no ID should 404."""
+    event = {"rawPath": "/s/", "requestContext": {"http": {"method": "GET"}}, "headers": {}}
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 404
+
+
+def test_share_page_special_chars_id(share_env):
+    """GET /s/<script> should 404 not crash."""
+    event = {"rawPath": "/s/<script>alert(1)</script>", "requestContext": {"http": {"method": "GET"}}, "headers": {}}
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 404
+
+
+# ---------------------------------------------------------------------------
 # v3 Unit tests: new features
 # ---------------------------------------------------------------------------
 

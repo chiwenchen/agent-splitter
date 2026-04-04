@@ -1058,8 +1058,9 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
               font-size:12px;font-weight:600;cursor:pointer;
               box-shadow:4px 4px 8px rgba(10,30,30,0.4),-2px -2px 4px rgba(60,100,100,0.1); }
     .me-btn.active { background:#e8a84c;color:#1e3636; }
-    .settlement.dimmed { opacity:0.3;transform:scale(0.97);filter:grayscale(0.5); }
-    .settlement { transition:opacity 0.3s,transform 0.3s,filter 0.3s; }
+    .settlement { transition:all 0.35s cubic-bezier(0.4,0,0.2,1);
+                  max-height:80px;overflow:hidden;margin-bottom:8px;opacity:1;transform:translateX(0); }
+    .settlement.hidden { max-height:0;opacity:0;transform:translateX(-40px);margin-bottom:0;padding-top:0;padding-bottom:0; }
   </style>
 </head>
 <body>
@@ -1086,9 +1087,9 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
   function filterMe(name) {
     document.querySelectorAll('.me-btn').forEach(b => b.classList.toggle('active', b.dataset.name === name || (!name && !b.dataset.name)));
     document.querySelectorAll('.settlement').forEach(s => {
-      if (!name) { s.classList.remove('dimmed'); return; }
+      if (!name) { s.classList.remove('hidden'); return; }
       const text = s.textContent;
-      s.classList.toggle('dimmed', !text.includes(name));
+      s.classList.toggle('hidden', !text.includes(name));
     });
   }
   </script>

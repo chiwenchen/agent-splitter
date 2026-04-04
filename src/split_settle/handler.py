@@ -738,6 +738,28 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
                            animation:shimmerSweep 2.5s ease-in-out infinite;pointer-events:none; }
     @keyframes receiptFloat{0%{left:100%}100%{left:-200%}}
     button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+    /* Calculator keypad */
+    .calc-pad { display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px;margin-bottom:8px; }
+    .calc-key { background:var(--layer-1);color:var(--text-on-dark);border:none;border-radius:8px;
+                padding:10px 0;font-size:16px;font-weight:600;cursor:pointer;
+                box-shadow:var(--neu-out);transition:transform 0.1s; }
+    .calc-key:active { transform:scale(0.95);box-shadow:var(--neu-in); }
+    .calc-key-op { color:var(--accent); }
+    .calc-key-eq { background:var(--accent);color:var(--layer-2); }
+    .calc-key-del { font-size:13px;color:var(--text-muted); }
+    /* Copy success flash */
+    @keyframes copyFlash { 0%{transform:scale(1)} 50%{transform:scale(1.05)} 100%{transform:scale(1)} }
+    .btn-copied { background:#4a8a6a!important;animation:copyFlash 0.3s ease; }
+    /* Haptic shake */
+    @keyframes hapticShake {
+      0%,100% { transform:translateX(0); }
+      10% { transform:translateX(-2px) rotate(-0.5deg); }
+      20% { transform:translateX(2px) rotate(0.5deg); }
+      30% { transform:translateX(-1px); }
+      40% { transform:translateX(1px); }
+      50% { transform:translateX(0); }
+    }
+    .haptic { animation:hapticShake 0.4s ease; }
     /* Golden shimmer sweep on input border */
     .input-orbit { position:relative;border-radius:14px;padding:2px;
       background:var(--border);overflow:hidden; }

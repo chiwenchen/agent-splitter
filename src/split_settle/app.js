@@ -65,6 +65,34 @@ function ArrowIcon() {
   </svg>`;
 }
 
+function haptic() {
+  try { navigator.vibrate && navigator.vibrate([15,30,15]); } catch(e) {}
+  // CSS shake on the phone container
+  const el = document.querySelector('.container');
+  if (el) { el.classList.add('haptic'); setTimeout(() => el.classList.remove('haptic'), 500); }
+}
+
+function CalcPad({value, onChange}) {
+  function press(k) {
+    if (k === 'C') { onChange(''); return; }
+    if (k === '⌫') { onChange(value.slice(0,-1)); return; }
+    if (k === '=') {
+      try { const r = Function('"use strict";return('+value.replace(/[^0-9+\-*/.()]/g,'')+')')();
+        if (isFinite(r) && r >= 0) onChange(String(Math.round(r*100)/100));
+      } catch(e) {}
+      return;
+    }
+    // Prevent double operators
+    if (['+','-','*','.'].includes(k) && ['+','-','*','.'].includes(value.slice(-1))) return;
+    onChange(value + k);
+  }
+  const keys = ['7','8','9','+','4','5','6','-','1','2','3','*','C','0','.','='];
+  return html`<div class="calc-pad">
+    ${keys.map(k => html`<button key=${k} class="calc-key ${['+','-','*'].includes(k)?'calc-key-op':''} ${k==='='?'calc-key-eq':''} ${k==='C'?'calc-key-del':''}"
+      onClick=${()=>press(k)} type="button">${k === 'C' ? '⌫' : k}</button>`)}
+  </div>`;
+}
+
 function SlideConfirm({label, onConfirm, disabled}) {
   const [dragging, setDragging] = useState(false);
   const [x, setX] = useState(0);
@@ -97,6 +125,7 @@ function SlideConfirm({label, onConfirm, disabled}) {
     if (x >= getMax() * 0.75) {
       setX(getMax());
       setDone(true);
+      haptic();
       onConfirm && onConfirm();
     } else {
       setX(0);
@@ -203,7 +232,10 @@ function App() {
       const data=await res.json(); setShareUrl(window.location.origin+data.url);
     } catch(e){setError(e.message);} setSharing(false);
   }
-  async function copyLink(){try{await navigator.clipboard.writeText(shareUrl)}catch(e){}}
+  const [copied, setCopied] = useState(false);
+  async function copyLink(){
+    try{await navigator.clipboard.writeText(shareUrl);setCopied(true);haptic();setTimeout(()=>setCopied(false),1500);}catch(e){}
+  }
   function webShare(){if(navigator.share)navigator.share({title:'SplitSettle',text:t.shareResults,url:shareUrl})}
 
   return html`
@@ -256,7 +288,8 @@ function App() {
         <div class="add-form">
           <input placeholder=${t.description} value=${formDesc} onInput=${e=>setFormDesc(e.target.value)} style="margin-bottom:8px"
             onKeyDown=${e=>{if(e.key==='Enter'){e.preventDefault();e.target.parentElement.querySelector('[inputmode="decimal"]').focus()}}} />
-          <input id="amt-input" placeholder=${t.amount} inputmode="decimal" value=${formAmt} onInput=${e=>setFormAmt(e.target.value)} style="margin-bottom:8px" />
+          <input id="amt-input" placeholder=${t.amount} inputmode="none" value=${formAmt} onInput=${e=>setFormAmt(e.target.value)} style="margin-bottom:0" readonly />
+          <${CalcPad} value=${formAmt} onChange=${v=>setFormAmt(v)} />
           <select value=${formPayer} onChange=${e=>setFormPayer(e.target.value)} style="margin-bottom:8px">
             ${names.map(n=>html`<option key=${n} value=${n}>${n} ${t.paid}</option>`)}
           </select>
@@ -331,7 +364,7 @@ function App() {
             <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(shareUrl)}&bgcolor=1e3636&color=e8a84c"
                  alt="QR" style="width:140px;height:140px;border-radius:12px;margin-bottom:12px;border:3px solid #3a5e5e" />
             <div style="display:flex;gap:6px;justify-content:center">
-              <button class="btn" style="flex:1;font-size:12px;padding:10px 8px" onClick=${copyLink}>${t.copyLink}</button>
+              <button class="btn ${copied?'btn-copied':''}" style="flex:1;font-size:12px;padding:10px 8px" onClick=${copyLink}>${copied?'✓':t.copyLink}</button>
               ${navigator.share?html`<button class="btn-outline" style="flex:1;font-size:12px;padding:10px 8px" onClick=${webShare}>${t.share}</button>`:''}
             </div>
             <div style="margin-top:8px;font-size:11px;color:var(--text-dim)">${t.validFor}</div>

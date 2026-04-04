@@ -262,7 +262,8 @@ function App() {
       </div>
       <div style="margin-top:10px" class="${names.length<2?'input-orbit':''}">
         <input placeholder=${t.addName} value=${newName} onInput=${e=>setNewName(e.target.value)}
-          onKeyDown=${e=>{if(e.key==='Enter'&&!e.isComposing&&!e.nativeEvent?.isComposing)addName()}} />
+          onKeyDown=${e=>{if(e.key==='Enter'&&!e.isComposing&&!e.nativeEvent?.isComposing)addName()}}
+          onBlur=${()=>{setTimeout(addName,100)}} />
       </div>
     </div>
 

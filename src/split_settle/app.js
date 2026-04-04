@@ -234,7 +234,12 @@ function App() {
   }
   const [copied, setCopied] = useState(false);
   async function copyLink(){
-    try{await navigator.clipboard.writeText(shareUrl);setCopied(true);haptic();setTimeout(()=>setCopied(false),1500);}catch(e){}
+    try { await navigator.clipboard.writeText(shareUrl); } catch(e) {
+      // Fallback: textarea copy
+      const ta=document.createElement('textarea');ta.value=shareUrl;ta.style.cssText='position:fixed;opacity:0';
+      document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+    }
+    setCopied(true);haptic();setTimeout(()=>setCopied(false),1500);
   }
   function webShare(){if(navigator.share)navigator.share({title:'SplitSettle',text:t.shareResults,url:shareUrl})}
 

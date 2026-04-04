@@ -539,7 +539,7 @@ def groups_env(monkeypatch):
     _fake_groups_db.clear()
     monkeypatch.setattr(handler, "_get_group_participants",
                         lambda gid: {
-                            k.split("PARTICIPANT#")[1]: v["wallet_address"]["S"]
+                            k.split("PARTICIPANT#")[1]: v.get("wallet_address", {}).get("S", "")
                             for k, v in _fake_groups_db.items()
                             if k.startswith(f"GROUP#{gid}|PARTICIPANT#")
                         })
@@ -916,3 +916,238 @@ def test_agent_api_still_requires_auth(monkeypatch):
     }
     response = lambda_handler(event, {})
     assert response["statusCode"] == 403
+
+
+# ---------------------------------------------------------------------------
+# v3 Unit tests: new features
+# ---------------------------------------------------------------------------
+
+def test_generate_share_id_length():
+    """Share IDs should be 8 chars."""
+    sid = handler._generate_share_id()
+    assert len(sid) == 8
+    assert isinstance(sid, str)
+
+
+def test_generate_share_id_unique():
+    """Two share IDs should not be identical."""
+    ids = {handler._generate_share_id() for _ in range(20)}
+    assert len(ids) == 20
+
+
+def test_docs_page_returns_html():
+    event = {"rawPath": "/docs", "requestContext": {"http": {"method": "GET"}}}
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 200
+    assert response["headers"]["Content-Type"] == "text/html"
+    assert "swagger" in response["body"].lower() or "Swagger" in response["body"]
+
+
+def test_home_page_has_importmap():
+    """Home page should include boring-avatars in importmap."""
+    event = {"rawPath": "/", "requestContext": {"http": {"method": "GET"}}}
+    response = lambda_handler(event, {})
+    assert "boring-avatars" in response["body"]
+    assert "importmap" in response["body"]
+
+
+def test_home_page_has_app_name():
+    """Home page should contain the app name in i18n."""
+    event = {"rawPath": "/", "requestContext": {"http": {"method": "GET"}}}
+    response = lambda_handler(event, {})
+    body = response["body"]
+    # Check all three language titles are in the JS
+    assert "Split Senpai" in body
+    assert "分帳仙貝" in body
+    assert "割り勘先輩" in body
+
+
+def test_share_with_lang_param(share_env):
+    """POST /v1/share with lang=zh-TW should include lang in URL."""
+    body = {"currency": "TWD", "participants": ["A", "B"], "lang": "zh-TW",
+            "expenses": [{"paid_by": "A", "amount": 100, "split_among": ["A", "B"]}]}
+    event = {"rawPath": "/v1/share", "requestContext": {"http": {"method": "POST"}},
+             "headers": {}, "body": json.dumps(body)}
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 200
+    result = json.loads(response["body"])
+    assert "lang=zh-TW" in result["url"]
+
+
+def test_share_with_lang_en_no_param(share_env):
+    """POST /v1/share with lang=en should NOT include lang in URL (default)."""
+    body = {"currency": "USD", "participants": ["A", "B"], "lang": "en",
+            "expenses": [{"paid_by": "A", "amount": 50, "split_among": ["A", "B"]}]}
+    event = {"rawPath": "/v1/share", "requestContext": {"http": {"method": "POST"}},
+             "headers": {}, "body": json.dumps(body)}
+    response = lambda_handler(event, {})
+    result = json.loads(response["body"])
+    assert "lang=" not in result["url"]
+
+
+def test_share_page_i18n_zh(share_env):
+    """Share page with lang=zh-TW should show Chinese title."""
+    _fake_share_save("zh-test", {"currency": "TWD"}, {
+        "currency": "TWD", "total_expenses": 100,
+        "settlements": [{"from": "B", "to": "A", "amount": 50}],
+        "summary": [{"participant": "A"}, {"participant": "B"}],
+        "num_settlements": 1,
+    })
+    event = {"rawPath": "/s/zh-test", "requestContext": {"http": {"method": "GET"}},
+             "headers": {}, "queryStringParameters": {"lang": "zh-TW"}}
+    response = lambda_handler(event, {})
+    assert response["statusCode"] == 200
+    assert "分帳仙貝" in response["body"]
+    assert "我是..." in response["body"]
+    assert "也要分帳？" in response["body"]
+
+
+def test_share_page_i18n_ja(share_env):
+    """Share page with lang=ja should show Japanese title."""
+    _fake_share_save("ja-test", {"currency": "JPY"}, {
+        "currency": "JPY", "total_expenses": 1000,
+        "settlements": [{"from": "B", "to": "A", "amount": 500}],
+        "summary": [{"participant": "A"}, {"participant": "B"}],
+        "num_settlements": 1,
+    })
+    event = {"rawPath": "/s/ja-test", "requestContext": {"http": {"method": "GET"}},
+             "headers": {}, "queryStringParameters": {"lang": "ja"}}
+    response = lambda_handler(event, {})
+    assert "割り勘先輩" in response["body"]
+
+
+def test_share_page_has_me_picker(share_env):
+    """Share page should have 'I am' filter buttons for each participant."""
+    _fake_share_save("me-test", {"currency": "USD"}, {
+        "currency": "USD", "total_expenses": 300,
+        "settlements": [{"from": "Carol", "to": "Alice", "amount": 100}],
+        "summary": [{"participant": "Alice"}, {"participant": "Bob"}, {"participant": "Carol"}],
+        "num_settlements": 1,
+    })
+    event = {"rawPath": "/s/me-test", "requestContext": {"http": {"method": "GET"}}, "headers": {}}
+    response = lambda_handler(event, {})
+    body = response["body"]
+    assert "me-picker" in body
+    assert "Alice" in body
+    assert "Bob" in body
+    assert "Carol" in body
+    assert "filterMe" in body  # JS function exists
+
+
+def test_share_page_has_split_senpai_title(share_env):
+    """Share page should use Split Senpai as default title."""
+    _fake_share_save("title-test", {"currency": "USD"}, {
+        "currency": "USD", "total_expenses": 100,
+        "settlements": [{"from": "B", "to": "A", "amount": 50}],
+        "summary": [{"participant": "A"}, {"participant": "B"}],
+        "num_settlements": 1,
+    })
+    event = {"rawPath": "/s/title-test", "requestContext": {"http": {"method": "GET"}}, "headers": {}}
+    response = lambda_handler(event, {})
+    assert "Split Senpai" in response["body"]
+
+
+def test_share_page_g_color_scheme(share_env):
+    """Share page should use G color scheme (deep teal)."""
+    _fake_share_save("color-test", {"currency": "USD"}, {
+        "currency": "USD", "total_expenses": 100,
+        "settlements": [{"from": "B", "to": "A", "amount": 50}],
+        "summary": [{"participant": "A"}, {"participant": "B"}],
+        "num_settlements": 1,
+    })
+    event = {"rawPath": "/s/color-test", "requestContext": {"http": {"method": "GET"}}, "headers": {}}
+    response = lambda_handler(event, {})
+    body = response["body"]
+    assert "#2d4a4a" in body or "#d5d0c8" in body  # G color scheme
+
+
+def test_render_share_page_settlement_html():
+    """_render_share_page should produce settlement divs with animation delay."""
+    result = {
+        "currency": "TWD", "total_expenses": 500,
+        "settlements": [
+            {"from": "Bob", "to": "Alice", "amount": 300},
+            {"from": "Carol", "to": "Alice", "amount": 200},
+        ],
+        "summary": [{"participant": "Alice"}, {"participant": "Bob"}, {"participant": "Carol"}],
+    }
+    si = {"title": "Test", "iam": "I am", "all": "All", "cta_q": "Split?", "cta": "Go"}
+    html = handler._render_share_page(result, "2026-04-04T00:00:00Z", si)
+    assert "Bob" in html and "Alice" in html and "Carol" in html
+    assert 'style="--i:0"' in html
+    assert 'style="--i:1"' in html
+    assert "TWD 300.00" in html
+    assert "TWD 200.00" in html
+
+
+def test_404_page_has_g_color_scheme():
+    """404 page should use G color scheme."""
+    event = {"rawPath": "/s/nonexist-404", "requestContext": {"http": {"method": "GET"}}, "headers": {}}
+    # Need share_env for _get_share mock, but without it we get an error
+    # Test the NOT_FOUND_HTML constant directly
+    assert "#d5d0c8" in handler.NOT_FOUND_HTML
+    assert "#2d4a4a" in handler.NOT_FOUND_HTML or "#e8a84c" in handler.NOT_FOUND_HTML
+
+
+# ---------------------------------------------------------------------------
+# Integration test: full flow
+# ---------------------------------------------------------------------------
+
+def test_full_flow_create_settle_share_view(groups_env, share_env, monkeypatch):
+    """Integration: create group → split settle → share → view share page."""
+    monkeypatch.delenv("SECRET_ARN", raising=False)
+
+    # Step 1: Create group (no wallets)
+    group_body = {
+        "group_id": "integration-test",
+        "participants": [{"name": "Alice"}, {"name": "Bob"}, {"name": "Carol"}],
+    }
+    resp1 = lambda_handler(_groups_event(group_body), {})
+    assert resp1["statusCode"] == 200
+    assert json.loads(resp1["body"])["participants"] == 3
+
+    # Step 2: Split settle with group_id (no execution since no wallets)
+    settle_body = {
+        "currency": "TWD", "group_id": "integration-test",
+        "participants": ["Alice", "Bob", "Carol"],
+        "expenses": [
+            {"description": "Dinner", "paid_by": "Alice", "amount": 1200, "split_among": ["Alice", "Bob", "Carol"]},
+            {"description": "Taxi", "paid_by": "Bob", "amount": 300, "split_among": ["Alice", "Bob", "Carol"]},
+        ],
+    }
+    resp2 = lambda_handler({
+        "rawPath": "/v1/split_settle", "requestContext": {"http": {"method": "POST"}},
+        "headers": {"x-api-key": "testkey"}, "body": json.dumps(settle_body),
+    }, {})
+    assert resp2["statusCode"] == 200
+    result = json.loads(resp2["body"])
+    assert result["num_settlements"] == 2
+    assert result["total_expenses"] == 1500
+    assert "execution" not in result  # no wallets
+
+    # Step 3: Share with lang
+    share_body = {
+        "currency": "TWD", "participants": ["Alice", "Bob", "Carol"], "lang": "zh-TW",
+        "expenses": settle_body["expenses"],
+    }
+    resp3 = lambda_handler({
+        "rawPath": "/v1/share", "requestContext": {"http": {"method": "POST"}},
+        "headers": {}, "body": json.dumps(share_body),
+    }, {})
+    assert resp3["statusCode"] == 200
+    share_result = json.loads(resp3["body"])
+    share_url = share_result["url"]
+    assert "lang=zh-TW" in share_url
+    share_id = share_result["share_id"]
+
+    # Step 4: View share page
+    resp4 = lambda_handler({
+        "rawPath": f"/s/{share_id}", "requestContext": {"http": {"method": "GET"}},
+        "headers": {}, "queryStringParameters": {"lang": "zh-TW"},
+    }, {})
+    assert resp4["statusCode"] == 200
+    body = resp4["body"]
+    assert "分帳仙貝" in body  # Chinese title
+    assert "Alice" in body
+    assert "TWD" in body
+    assert "me-picker" in body  # I am filter

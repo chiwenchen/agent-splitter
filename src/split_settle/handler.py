@@ -710,6 +710,10 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
                    padding:12px 20px;font-size:14px;font-weight:700;cursor:grab;z-index:2;
                    box-shadow:var(--neu-out);white-space:nowrap;transition:none;min-width:140px;text-align:center; }
     .confirm-btn:active { cursor:grabbing; }
+    .dot-loading span { animation:dotBounce 1.2s infinite; display:inline-block; }
+    .dot-loading span:nth-child(2) { animation-delay:0.2s; }
+    .dot-loading span:nth-child(3) { animation-delay:0.4s; }
+    @keyframes dotBounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-4px)} }
     .confirm-arrows { display:flex;align-items:center;margin-left:12px; }
     .arrow-icon { width:20px;height:20px;color:var(--text-dim);margin-left:-6px;
                   animation:arrowFlow 2s infinite;opacity:0; }

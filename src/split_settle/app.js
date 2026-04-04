@@ -151,7 +151,7 @@ function SlideConfirm({label, onConfirm, disabled}) {
         onMouseDown=${e => start(e.clientX)}
         onTouchStart=${e => start(e.touches[0].clientX)}
         disabled=${disabled}>
-        ${done ? '✓' : label}
+        ${done ? html`<span class="dot-loading"><span>·</span><span>·</span><span>·</span></span>` : label}
       </button>
       ${!done ? html`<div class="confirm-arrows" style="opacity:${1 - progress}">
         <${ArrowIcon}/><${ArrowIcon}/><${ArrowIcon}/><${ArrowIcon}/><${ArrowIcon}/>

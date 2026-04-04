@@ -239,12 +239,14 @@ function App() {
     } catch(e){setError(e.message);} setSharing(false);
   }
   const [copied, setCopied] = useState(false);
-  async function copyLink(){
-    try { await navigator.clipboard.writeText(shareUrl); } catch(e) {
-      // Fallback: textarea copy
-      const ta=document.createElement('textarea');ta.value=shareUrl;ta.style.cssText='position:fixed;opacity:0';
-      document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
-    }
+  function copyLink(){
+    // Use sync fallback first (works on first click, no permission needed)
+    const ta=document.createElement('textarea');ta.value=shareUrl;ta.style.cssText='position:fixed;left:-9999px;opacity:0';
+    document.body.appendChild(ta);ta.focus();ta.select();
+    try{document.execCommand('copy')}catch(e){}
+    document.body.removeChild(ta);
+    // Also try async clipboard API (for future pastes)
+    try{navigator.clipboard?.writeText(shareUrl)}catch(e){}
     setCopied(true);haptic();setTimeout(()=>setCopied(false),1500);
   }
   function webShare(){if(navigator.share)navigator.share({title:'SplitSettle',text:t.shareResults,url:shareUrl})}

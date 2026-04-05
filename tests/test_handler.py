@@ -1345,3 +1345,121 @@ def test_full_flow_create_settle_share_view(groups_env, share_env, monkeypatch):
     assert "Alice" in body
     assert "TWD" in body
     assert "me-picker" in body  # I am filter
+
+
+# ---------------------------------------------------------------------------
+# Native app backend support tests
+# ---------------------------------------------------------------------------
+
+def test_apple_app_site_association():
+    """GET /.well-known/apple-app-site-association returns valid AASA JSON."""
+    resp = lambda_handler({
+        "rawPath": "/.well-known/apple-app-site-association",
+        "requestContext": {"http": {"method": "GET"}},
+        "headers": {},
+    }, {})
+    assert resp["statusCode"] == 200
+    assert resp["headers"]["Content-Type"] == "application/json"
+    body = json.loads(resp["body"])
+    assert "applinks" in body
+    assert body["applinks"]["details"][0]["paths"] == ["/s/*"]
+
+
+def test_assetlinks_json():
+    """GET /.well-known/assetlinks.json returns valid Android asset links."""
+    resp = lambda_handler({
+        "rawPath": "/.well-known/assetlinks.json",
+        "requestContext": {"http": {"method": "GET"}},
+        "headers": {},
+    }, {})
+    assert resp["statusCode"] == 200
+    assert resp["headers"]["Content-Type"] == "application/json"
+    body = json.loads(resp["body"])
+    assert isinstance(body, list)
+    assert body[0]["target"]["namespace"] == "android_app"
+    assert body[0]["target"]["package_name"] == "com.splitsenpai.app"
+
+
+def test_share_json_endpoint_returns_data(monkeypatch):
+    """GET /v1/share/{id} returns share data as JSON."""
+    fake_data = {
+        "request_body": {"currency": "TWD", "participants": ["A", "B"],
+                         "expenses": [{"paid_by": "A", "amount": 100, "split_among": ["A", "B"]}]},
+        "result": {"currency": "TWD", "total_expenses": 100,
+                   "settlements": [{"from": "B", "to": "A", "amount": 50}],
+                   "summary": [{"participant": "A", "paid": 100, "owed": 50, "net": 50},
+                               {"participant": "B", "paid": 0, "owed": 50, "net": -50}]},
+        "created_at": "2026-04-04T00:00:00Z",
+        "ttl_expiry": int(time.time()) + 86400,
+    }
+    monkeypatch.setattr(handler, "_get_share", lambda sid: fake_data if sid == "abc12345" else None)
+
+    resp = lambda_handler({
+        "rawPath": "/v1/share/abc12345",
+        "requestContext": {"http": {"method": "GET"}},
+        "headers": {},
+    }, {})
+    assert resp["statusCode"] == 200
+    body = json.loads(resp["body"])
+    assert body["share_id"] == "abc12345"
+    assert body["result"]["currency"] == "TWD"
+    assert body["result"]["settlements"][0]["from"] == "B"
+    assert body["created_at"] == "2026-04-04T00:00:00Z"
+
+
+def test_share_json_endpoint_not_found(monkeypatch):
+    """GET /v1/share/{id} returns 404 for unknown share."""
+    monkeypatch.setattr(handler, "_get_share", lambda sid: None)
+
+    resp = lambda_handler({
+        "rawPath": "/v1/share/nonexistent",
+        "requestContext": {"http": {"method": "GET"}},
+        "headers": {},
+    }, {})
+    assert resp["statusCode"] == 404
+    body = json.loads(resp["body"])
+    assert "not found" in body["error"].lower() or "expired" in body["error"].lower()
+
+
+def test_share_json_endpoint_expired(monkeypatch):
+    """GET /v1/share/{id} returns 404 for expired share."""
+    fake_data = {
+        "request_body": {},
+        "result": {},
+        "created_at": "2026-01-01T00:00:00Z",
+        "ttl_expiry": int(time.time()) - 1,  # expired
+    }
+    monkeypatch.setattr(handler, "_get_share", lambda sid: fake_data)
+
+    resp = lambda_handler({
+        "rawPath": "/v1/share/expired123",
+        "requestContext": {"http": {"method": "GET"}},
+        "headers": {},
+    }, {})
+    assert resp["statusCode"] == 404
+
+
+def test_share_json_endpoint_no_id():
+    """GET /v1/share/ with no ID returns 404."""
+    resp = lambda_handler({
+        "rawPath": "/v1/share/",
+        "requestContext": {"http": {"method": "GET"}},
+        "headers": {},
+    }, {})
+    assert resp["statusCode"] == 404
+
+
+def test_share_page_has_smart_app_banner():
+    """Share page HTML includes Smart App Banner meta tag."""
+    from handler import SHARE_PAGE_TEMPLATE
+    assert 'name="apple-itunes-app"' in SHARE_PAGE_TEMPLATE
+
+
+def test_aasa_method_not_allowed():
+    """POST to AASA endpoint returns 405."""
+    resp = lambda_handler({
+        "rawPath": "/.well-known/apple-app-site-association",
+        "requestContext": {"http": {"method": "POST"}},
+        "headers": {},
+    }, {})
+    assert resp["statusCode"] == 405

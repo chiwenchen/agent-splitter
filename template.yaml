@@ -141,6 +141,24 @@ Resources:
             Path: /s/{id}
             Method: get
             ApiId: !Ref SplitSettleApi
+        ShareJson:
+          Type: HttpApi
+          Properties:
+            Path: /v1/share/{id}
+            Method: get
+            ApiId: !Ref SplitSettleApi
+        AppleAppSiteAssociation:
+          Type: HttpApi
+          Properties:
+            Path: /.well-known/apple-app-site-association
+            Method: get
+            ApiId: !Ref SplitSettleApi
+        AssetLinks:
+          Type: HttpApi
+          Properties:
+            Path: /.well-known/assetlinks.json
+            Method: get
+            ApiId: !Ref SplitSettleApi
 
 Outputs:
   ApiUrl:

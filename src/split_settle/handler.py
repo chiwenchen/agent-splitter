@@ -1017,6 +1017,7 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
   <meta property="og:title" content="{{og_title}}" />
   <meta property="og:description" content="{{og_desc}}" />
   <meta property="og:type" content="website" />
+  <meta name="apple-itunes-app" content="app-id=TODO_APPLE_APP_ID" />
   <style>
     * { margin:0;padding:0;box-sizing:border-box; }
     body { font-family:'Inter',-apple-system,system-ui,sans-serif; background:#d5d0c8;
@@ -1164,7 +1165,14 @@ _ROUTE_METHODS = {
     "/v1/share": "POST",
     "/v1/split_settle": "POST",
     "/v1/groups": "POST",
+    "/.well-known/apple-app-site-association": "GET",
+    "/.well-known/assetlinks.json": "GET",
 }
+
+# App Store IDs — update these after registering on Apple/Google
+_APPLE_APP_ID = "TEAMID.com.splitsenpai.app"  # TODO: replace with real Apple Team ID + bundle ID
+_ANDROID_PACKAGE = "com.splitsenpai.app"
+_ANDROID_SHA256 = "TODO:REPLACE_WITH_REAL_SHA256"  # TODO: replace after first EAS build
 
 
 def lambda_handler(event, context):
@@ -1202,6 +1210,35 @@ def lambda_handler(event, context):
             "headers": {"Content-Type": "text/html"},
             "body": APP_HTML,
         }
+
+    if path == "/.well-known/apple-app-site-association":
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({
+                "applinks": {
+                    "apps": [],
+                    "details": [{"appID": _APPLE_APP_ID, "paths": ["/s/*"]}],
+                },
+            }),
+        }
+
+    if path == "/.well-known/assetlinks.json":
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps([{
+                "relation": ["delegate_permission/common.handle_all_urls"],
+                "target": {
+                    "namespace": "android_app",
+                    "package_name": _ANDROID_PACKAGE,
+                    "sha256_cert_fingerprints": [_ANDROID_SHA256],
+                },
+            }]),
+        }
+
+    if path.startswith("/v1/share/"):
+        return _handle_share_json(event)
 
     if path.startswith("/s/"):
         return _handle_share_page(event)
@@ -1257,6 +1294,37 @@ def _handle_groups(event):
             "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"error": "Internal server error"}),
         }
+
+
+def _handle_share_json(event):
+    """GET /v1/share/{id} — return share data as JSON for the native app."""
+    path = event.get("rawPath", "")
+    share_id = path.split("/v1/share/", 1)[-1].split("?")[0] if "/v1/share/" in path else ""
+    if not share_id:
+        return {
+            "statusCode": 404,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "share_id required"}),
+        }
+
+    data = _get_share(share_id)
+    if not data or data["ttl_expiry"] < time.time():
+        return {
+            "statusCode": 404,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "Share not found or expired"}),
+        }
+
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({
+            "share_id": share_id,
+            "request_body": data["request_body"],
+            "result": data["result"],
+            "created_at": data["created_at"],
+        }),
+    }
 
 
 def _handle_share(event):

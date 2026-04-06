@@ -45,7 +45,7 @@ from mcp.types import Tool, TextContent
 import httpx
 import json
 
-API_URL = "https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com/split_settle"
+API_URL = "https://split.redarch.dev/split_settle"
 
 app = Server("split-settle")
 

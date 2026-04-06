@@ -68,8 +68,8 @@ For local dev/tests: set `API_KEY=<any-value>` env var (bypasses Secrets Manager
 ## AWS Resources
 
 - Stack: `agent-splitter` (ap-northeast-1)
-- Endpoint: `https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com/v1/split_settle`
-- OpenAPI: `https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com/openapi.json`
+- Endpoint: `https://split.redarch.dev/v1/split_settle`
+- OpenAPI: `https://split.redarch.dev/openapi.json`
 - Budget: `monthly-10-usd-limit` — stops Lambda at $10/month (cwchen2000@gmail.com)
 - IAM User: `ClaudeCLI` with `SplitSettleDeployPolicy` (`iam/claudecli-policy.json`)
 
@@ -112,7 +112,7 @@ Other agents add via URL: `http://<your-server>:8000/sse`
 
 Alternatively, agents can call the HTTP API directly (no MCP needed):
 ```bash
-curl -X POST https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com/v1/split_settle \
+curl -X POST https://split.redarch.dev/v1/split_settle \
   -H "x-api-key: <key>" \
   -H "Content-Type: application/json" \
   -d '{ ... }'

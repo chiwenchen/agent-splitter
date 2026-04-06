@@ -36,7 +36,7 @@ except ImportError:
 # Configuration
 API_BASE = os.environ.get(
     "SPLIT_SETTLE_API_URL",
-    "https://aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com",
+    "https://split.redarch.dev",
 )
 API_KEY = os.environ.get("SPLIT_SETTLE_API_KEY", "")
 PRIVATE_KEY = os.environ.get("DEMO_PRIVATE_KEY", "")

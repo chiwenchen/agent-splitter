@@ -5,7 +5,7 @@
  */
 import { chromium } from 'playwright';
 
-const URL = process.env.TEST_URL || 'https://sfd9k548wj.execute-api.ap-northeast-1.amazonaws.com';
+const URL = process.env.TEST_URL || 'https://split.redarch.dev';
 let passed = 0, failed = 0;
 
 async function test(name, fn) {

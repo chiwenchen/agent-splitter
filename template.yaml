@@ -20,6 +20,10 @@ Resources:
     Properties:
       Name: split-settle/api-key-v2
       Description: API Key for SplitSettle service (x-api-key header)
+      GenerateSecretString:
+        PasswordLength: 48
+        ExcludePunctuation: true
+        IncludeSpace: false
 
   AlchemySecret:
     Type: AWS::SecretsManager::Secret
@@ -72,6 +76,7 @@ Resources:
           ALCHEMY_SECRET_ARN: !Ref AlchemySecret
           PAYMENTS_TABLE: !Ref UsedPaymentsTable
           GROUPS_TABLE: !Ref GroupsTable
+          ALLOWED_HOSTS: split.redarch.dev
       Policies:
         - AWSLambdaBasicExecutionRole
         - Statement:

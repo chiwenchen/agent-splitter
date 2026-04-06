@@ -42,6 +42,18 @@ def _get_secret(env_var: str, arn_var: str) -> str:
         _secret_cache[env_var] = response.get("SecretString", "")
     else:
         _secret_cache[env_var] = ""
+    # SECURITY: fail-closed in production. If the API key secret resolves to
+    # empty inside a Lambda runtime, something is misconfigured and we MUST
+    # NOT silently degrade to "no auth required".
+    if (
+        env_var == "API_KEY"
+        and not _secret_cache[env_var]
+        and os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+    ):
+        raise RuntimeError(
+            "API_KEY secret is empty in Lambda runtime — refusing to start "
+            "in unauthenticated mode"
+        )
     return _secret_cache[env_var]
 
 
@@ -335,7 +347,7 @@ OPENAPI_SCHEMA = {
     },
     "servers": [
         {
-            "url": "https://sfd9k548wj.execute-api.ap-northeast-1.amazonaws.com",
+            "url": "https://split.redarch.dev",
             "description": "Production",
         }
     ],
@@ -1071,8 +1083,8 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
     <div class="info">{{participants}}</div>
     <div class="info" style="margin-bottom:16px">Total: {{currency}} {{total}}</div>
     <div style="font-size:11px;color:#5a7a70;margin-bottom:8px">{{iam}}</div>
-    <div class="me-picker">
-      <button class="me-btn active" onclick="filterMe('')">{{all_label}}</button>
+    <div class="me-picker" id="me-picker">
+      <button class="me-btn active" data-all="1">{{all_label}}</button>
       {{me_buttons}}
     </div>
     <hr class="divider">
@@ -1085,14 +1097,24 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
     <div class="footer"><a href="/docs">API Docs</a> · Powered by x402</div>
   </div>
   <script>
+  // Event delegation — no user data ever touches inline JS. Names live in
+  // data-name attributes which are HTML-escaped at render time.
   function filterMe(name) {
-    document.querySelectorAll('.me-btn').forEach(b => b.classList.toggle('active', b.dataset.name === name || (!name && !b.dataset.name)));
+    document.querySelectorAll('.me-btn').forEach(b => {
+      const isAll = b.hasAttribute('data-all');
+      b.classList.toggle('active', (!name && isAll) || (!!name && b.dataset.name === name));
+    });
     document.querySelectorAll('.settlement').forEach(s => {
       if (!name) { s.classList.remove('hidden'); return; }
       const text = s.textContent;
       s.classList.toggle('hidden', !text.includes(name));
     });
   }
+  document.getElementById('me-picker').addEventListener('click', function(e) {
+    const btn = e.target.closest('.me-btn');
+    if (!btn) return;
+    filterMe(btn.hasAttribute('data-all') ? '' : (btn.dataset.name || ''));
+  });
   </script>
 </body>
 </html>"""
@@ -1122,9 +1144,13 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None) -> s
             f'</div>'
         )
 
+    # SECURITY: data-name carries the (HTML-escaped) name; click handler is
+    # attached via JS event delegation in the template, NOT inline onclick.
+    # Inlining the name into onclick would create a stored-XSS sink because
+    # browsers HTML-decode attribute values before JS parses them.
     me_buttons = ""
     for name in names:
-        me_buttons += f'<button class="me-btn" data-name="{name}" onclick="filterMe(&#x27;{name}&#x27;)">{name}</button>'
+        me_buttons += f'<button class="me-btn" data-name="{name}">{name}</button>'
 
     s_plural = "s" if n_sett != 1 else ""
     replacements = {
@@ -1151,6 +1177,33 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None) -> s
     return html
 
 
+# SECURITY: baseline response headers applied to HTML responses. CSP is the
+# last-line defense against XSS even if an escape-hatch slips in. unsafe-inline
+# is kept only because the shared-page JS is inlined; long-term, move to an
+# external script and drop it.
+_HTML_SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self' https://esm.sh https://unpkg.com 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'none'"
+    ),
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+}
+
+
+def _html_response(status: int, body: str) -> dict:
+    headers = {"Content-Type": "text/html; charset=utf-8"}
+    headers.update(_HTML_SECURITY_HEADERS)
+    return {"statusCode": status, "headers": headers, "body": body}
+
+
 _METHOD_NOT_ALLOWED = {
     "statusCode": 405,
     "headers": {"Content-Type": "application/json"},
@@ -1169,15 +1222,42 @@ _ROUTE_METHODS = {
     "/.well-known/assetlinks.json": "GET",
 }
 
-# App Store IDs — update these after registering on Apple/Google
-_APPLE_APP_ID = "TEAMID.com.splitsenpai.app"  # TODO: replace with real Apple Team ID + bundle ID
-_ANDROID_PACKAGE = "com.splitsenpai.app"
-_ANDROID_SHA256 = "TODO:REPLACE_WITH_REAL_SHA256"  # TODO: replace after first EAS build
+# App Store IDs — populated via environment variables after app store registration.
+# If unset, the /.well-known/* endpoints return 404 so we never publish placeholder
+# fingerprints that could be claimed by a malicious app.
+_APPLE_APP_ID = os.environ.get("APPLE_APP_ID", "")
+_ANDROID_PACKAGE = os.environ.get("ANDROID_PACKAGE", "")
+_ANDROID_SHA256 = os.environ.get("ANDROID_SHA256", "")
+
+
+def _allowed_hosts() -> set:
+    """Set of Host headers permitted to reach this Lambda. Set ALLOWED_HOSTS
+    env var in production to the custom domain (comma-separated if multiple)
+    to block direct hits on the raw execute-api.amazonaws.com URL."""
+    raw = os.environ.get("ALLOWED_HOSTS", "")
+    if not raw:
+        return set()
+    return {h.strip().lower() for h in raw.split(",") if h.strip()}
 
 
 def lambda_handler(event, context):
     path = event.get("rawPath", "")
     method = event.get("requestContext", {}).get("http", {}).get("method", "")
+
+    # SECURITY: reject direct hits on the default execute-api endpoint.
+    # HTTP API has no disableExecuteApiEndpoint flag, so we enforce host
+    # allow-listing in-app. Traffic via the custom domain carries the
+    # correct Host header; direct curl to *.amazonaws.com does not.
+    allowed = _allowed_hosts()
+    if allowed:
+        host_hdr = ((event.get("headers") or {}).get("host") or "").lower()
+        host_only = host_hdr.split(":", 1)[0]
+        if host_only and host_only not in allowed:
+            return {
+                "statusCode": 403,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"error": "Forbidden"}),
+            }
 
     expected_method = _ROUTE_METHODS.get(path)
     if expected_method and method and method != expected_method:
@@ -1198,20 +1278,15 @@ def lambda_handler(event, context):
         }
 
     if path == "/docs":
-        return {
-            "statusCode": 200,
-            "headers": {"Content-Type": "text/html"},
-            "body": SWAGGER_HTML,
-        }
+        return _html_response(200, SWAGGER_HTML)
 
     if path == "/":
-        return {
-            "statusCode": 200,
-            "headers": {"Content-Type": "text/html"},
-            "body": APP_HTML,
-        }
+        return _html_response(200, APP_HTML)
 
     if path == "/.well-known/apple-app-site-association":
+        if not _APPLE_APP_ID:
+            return {"statusCode": 404, "headers": {"Content-Type": "application/json"},
+                    "body": json.dumps({"error": "not configured"})}
         return {
             "statusCode": 200,
             "headers": {"Content-Type": "application/json"},
@@ -1224,6 +1299,9 @@ def lambda_handler(event, context):
         }
 
     if path == "/.well-known/assetlinks.json":
+        if not _ANDROID_PACKAGE or not _ANDROID_SHA256:
+            return {"statusCode": 404, "headers": {"Content-Type": "application/json"},
+                    "body": json.dumps({"error": "not configured"})}
         return {
             "statusCode": 200,
             "headers": {"Content-Type": "application/json"},
@@ -1327,10 +1405,20 @@ def _handle_share_json(event):
     }
 
 
+_SHARE_MAX_BODY_BYTES = 64 * 1024  # 64 KB hard cap on anonymous share payloads
+
+
 def _handle_share(event):
     """POST /v1/share — public endpoint, saves split result, returns share link."""
     try:
-        body = json.loads(event.get("body") or "{}")
+        raw = event.get("body") or "{}"
+        if len(raw) > _SHARE_MAX_BODY_BYTES:
+            return {
+                "statusCode": 413,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"error": "payload too large"}),
+            }
+        body = json.loads(raw)
         lang = body.pop("lang", "en")
         result = split_settle(body)
         share_id = _generate_share_id()
@@ -1368,18 +1456,18 @@ def _handle_share_page(event):
     path = event.get("rawPath", "")
     share_id = path.split("/s/", 1)[-1].split("?")[0] if "/s/" in path else ""
     if not share_id:
-        return {"statusCode": 404, "headers": {"Content-Type": "text/html"}, "body": NOT_FOUND_HTML}
+        return _html_response(404, NOT_FOUND_HTML)
 
     data = _get_share(share_id)
     if not data or data["ttl_expiry"] < time.time():
-        return {"statusCode": 404, "headers": {"Content-Type": "text/html"}, "body": NOT_FOUND_HTML}
+        return _html_response(404, NOT_FOUND_HTML)
 
     qs = event.get("queryStringParameters") or {}
     lang = qs.get("lang", "en")
     si = _SHARE_I18N.get(lang, _SHARE_I18N["en"])
 
     html_out = _render_share_page(data["result"], data["created_at"], si)
-    return {"statusCode": 200, "headers": {"Content-Type": "text/html"}, "body": html_out}
+    return _html_response(200, html_out)
 
 
 def _handle_split_settle(event):
@@ -1457,6 +1545,8 @@ def split_settle(data: dict) -> dict:
             raise ValueError(f"participant name too long: max 50 chars")
     if len(expenses) < 1:
         raise ValueError("at least 1 expense required")
+    if len(expenses) > 200:
+        raise ValueError("expenses cannot exceed 200")
 
     participant_set = set(participants)
     total_paid_cents = {p: 0 for p in participants}

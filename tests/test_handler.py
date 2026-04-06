@@ -734,7 +734,7 @@ def test_home_page_returns_html():
     event = {"rawPath": "/", "requestContext": {"http": {"method": "GET"}}}
     response = lambda_handler(event, {})
     assert response["statusCode"] == 200
-    assert response["headers"]["Content-Type"] == "text/html"
+    assert response["headers"]["Content-Type"].startswith("text/html")
     assert "SplitSettle" in response["body"]
     assert "preact" in response["body"].lower()
 
@@ -821,7 +821,7 @@ def test_share_page_renders(share_env):
     event = {"rawPath": "/s/test1234", "requestContext": {"http": {"method": "GET"}}, "headers": {}}
     response = lambda_handler(event, {})
     assert response["statusCode"] == 200
-    assert response["headers"]["Content-Type"] == "text/html"
+    assert response["headers"]["Content-Type"].startswith("text/html")
     assert "Alice" in response["body"]
     assert "Bob" in response["body"]
 
@@ -1133,7 +1133,7 @@ def test_docs_page_returns_html():
     event = {"rawPath": "/docs", "requestContext": {"http": {"method": "GET"}}}
     response = lambda_handler(event, {})
     assert response["statusCode"] == 200
-    assert response["headers"]["Content-Type"] == "text/html"
+    assert response["headers"]["Content-Type"].startswith("text/html")
     assert "swagger" in response["body"].lower() or "Swagger" in response["body"]
 
 
@@ -1274,6 +1274,63 @@ def test_render_share_page_settlement_html():
     assert "TWD 200.00" in html
 
 
+def test_render_share_page_no_xss_via_participant_name():
+    """SECURITY regression: a malicious participant name must not break out of
+    the onclick JS string. Names should only appear inside HTML-escaped
+    attribute contexts, never inline JS."""
+    malicious = "');alert(1);//"
+    result = {
+        "currency": "TWD", "total_expenses": 100,
+        "settlements": [{"from": malicious, "to": "Alice", "amount": 100}],
+        "summary": [{"participant": malicious}, {"participant": "Alice"}],
+    }
+    si = {"title": "T", "iam": "x", "all": "All", "cta_q": "?", "cta": "Go"}
+    html = handler._render_share_page(result, "", si)
+    # No inline onclick=filterMe(...) on rendered buttons — event delegation only
+    assert "onclick=\"filterMe" not in html
+    # Raw quote must not appear inside any attribute as plain text
+    assert "alert(1)" not in html or "&#x27;" in html  # if present, must be escaped
+    # Specifically, the exploit string must be HTML-encoded everywhere
+    assert "');alert(1);//" not in html
+
+
+def test_host_header_rejects_execute_api(monkeypatch):
+    """SECURITY: when ALLOWED_HOSTS is set, hits on the raw execute-api.amazonaws.com
+    endpoint must be rejected with 403 so Cloudflare/WAF in front of the custom
+    domain cannot be bypassed."""
+    monkeypatch.setenv("ALLOWED_HOSTS", "split.redarch.dev")
+    resp = lambda_handler({
+        "rawPath": "/health",
+        "requestContext": {"http": {"method": "GET"}},
+        "headers": {"host": "aztyjlixm1.execute-api.ap-northeast-1.amazonaws.com"},
+    }, {})
+    assert resp["statusCode"] == 403
+
+
+def test_host_header_allows_custom_domain(monkeypatch):
+    monkeypatch.setenv("ALLOWED_HOSTS", "split.redarch.dev")
+    resp = lambda_handler({
+        "rawPath": "/health",
+        "requestContext": {"http": {"method": "GET"}},
+        "headers": {"host": "split.redarch.dev"},
+    }, {})
+    assert resp["statusCode"] == 200
+
+
+def test_share_body_size_limit(share_env):
+    """SECURITY: /v1/share must reject oversized payloads to protect DynamoDB."""
+    huge = {"currency": "TWD", "participants": ["A", "B"],
+            "expenses": [{"paid_by": "A", "amount": 1, "split_among": ["A", "B"]}],
+            "padding": "x" * 70000}
+    resp = lambda_handler({
+        "rawPath": "/v1/share",
+        "requestContext": {"http": {"method": "POST"}},
+        "headers": {},
+        "body": json.dumps(huge),
+    }, {})
+    assert resp["statusCode"] == 413
+
+
 def test_404_page_has_g_color_scheme():
     """404 page should use G color scheme."""
     event = {"rawPath": "/s/nonexist-404", "requestContext": {"http": {"method": "GET"}}, "headers": {}}
@@ -1351,8 +1408,9 @@ def test_full_flow_create_settle_share_view(groups_env, share_env, monkeypatch):
 # Native app backend support tests
 # ---------------------------------------------------------------------------
 
-def test_apple_app_site_association():
+def test_apple_app_site_association(monkeypatch):
     """GET /.well-known/apple-app-site-association returns valid AASA JSON."""
+    monkeypatch.setattr(handler, "_APPLE_APP_ID", "ABC123.com.splitsenpai.app")
     resp = lambda_handler({
         "rawPath": "/.well-known/apple-app-site-association",
         "requestContext": {"http": {"method": "GET"}},
@@ -1365,8 +1423,21 @@ def test_apple_app_site_association():
     assert body["applinks"]["details"][0]["paths"] == ["/s/*"]
 
 
-def test_assetlinks_json():
+def test_aasa_returns_404_when_unconfigured(monkeypatch):
+    """AASA returns 404 when APPLE_APP_ID env var is unset (no placeholder published)."""
+    monkeypatch.setattr(handler, "_APPLE_APP_ID", "")
+    resp = lambda_handler({
+        "rawPath": "/.well-known/apple-app-site-association",
+        "requestContext": {"http": {"method": "GET"}},
+        "headers": {},
+    }, {})
+    assert resp["statusCode"] == 404
+
+
+def test_assetlinks_json(monkeypatch):
     """GET /.well-known/assetlinks.json returns valid Android asset links."""
+    monkeypatch.setattr(handler, "_ANDROID_PACKAGE", "com.splitsenpai.app")
+    monkeypatch.setattr(handler, "_ANDROID_SHA256", "AA:BB:CC:DD")
     resp = lambda_handler({
         "rawPath": "/.well-known/assetlinks.json",
         "requestContext": {"http": {"method": "GET"}},
@@ -1378,6 +1449,18 @@ def test_assetlinks_json():
     assert isinstance(body, list)
     assert body[0]["target"]["namespace"] == "android_app"
     assert body[0]["target"]["package_name"] == "com.splitsenpai.app"
+
+
+def test_assetlinks_returns_404_when_unconfigured(monkeypatch):
+    """Assetlinks returns 404 when env vars unset (never publish placeholder SHA256)."""
+    monkeypatch.setattr(handler, "_ANDROID_PACKAGE", "")
+    monkeypatch.setattr(handler, "_ANDROID_SHA256", "")
+    resp = lambda_handler({
+        "rawPath": "/.well-known/assetlinks.json",
+        "requestContext": {"http": {"method": "GET"}},
+        "headers": {},
+    }, {})
+    assert resp["statusCode"] == 404
 
 
 def test_share_json_endpoint_returns_data(monkeypatch):

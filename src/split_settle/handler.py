@@ -1528,12 +1528,243 @@ def _handle_admin(event: dict, claims: dict) -> dict:
     }
 
 
+_ADMIN_SPA_HTML = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Split Senpai Admin</title>
+<style>
+  :root {
+    --bg: #2d4a4a;
+    --layer1: #1e3636;
+    --layer2: #162a2a;
+    --accent: #e8a84c;
+    --text: #e0d5c4;
+    --muted: #a0c4b8;
+    --border: #3a5e5e;
+    --error: #e06050;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+  h1 { color: var(--accent); font-size: 24px; margin: 0 0 24px; }
+  h2 { color: var(--accent); font-size: 16px; margin: 24px 0 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .card {
+    background: var(--layer1);
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid var(--border);
+  }
+  .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .card .value { color: var(--accent); font-size: 24px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; background: var(--layer1); border-radius: 12px; overflow: hidden; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--layer2); color: var(--muted); font-size: 11px; text-transform: uppercase; }
+  td { font-size: 13px; }
+  td.amount { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+  button { background: var(--accent); color: var(--layer1); border: none; padding: 6px 12px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 12px; }
+  button:hover { opacity: 0.85; }
+  button.danger { background: var(--error); color: white; }
+  button.outline { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  .chart-container { background: var(--layer1); border-radius: 12px; padding: 16px; }
+  .empty { color: var(--muted); text-align: center; padding: 32px; font-style: italic; }
+  .loading { color: var(--muted); padding: 16px; text-align: center; }
+  .error { color: var(--error); padding: 16px; }
+  code { background: var(--layer2); padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div id="app" class="container">
+  <h1>分帳仙貝 Admin</h1>
+  <div id="content" class="loading">Loading...</div>
+</div>
+<script type="module">
+import { h, render } from 'https://esm.sh/preact@10.19.0';
+import { useState, useEffect } from 'https://esm.sh/preact@10.19.0/hooks';
+import htm from 'https://esm.sh/htm@3.1.1';
+const html = htm.bind(h);
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts);
+  if (!r.ok) throw new Error(path + ' returned ' + r.status);
+  return r.json();
+}
+
+function StatCard({ label, value }) {
+  return html`<div class="card"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+}
+
+function LineChart({ data }) {
+  if (!data || data.length === 0) return html`<div class="empty">No data</div>`;
+  const w = 600, hgt = 180, pad = 30;
+  const max = Math.max(...data.map(d => d.count), 1);
+  const points = data.map((d, i) => {
+    const x = pad + (i / Math.max(data.length - 1, 1)) * (w - 2 * pad);
+    const y = hgt - pad - (d.count / max) * (hgt - 2 * pad);
+    return `${x},${y}`;
+  }).join(' ');
+  return html`
+    <svg viewBox="0 0 ${w} ${hgt}" style="width:100%;height:auto">
+      <polyline fill="none" stroke="#e8a84c" stroke-width="2" points=${points} />
+      ${data.map((d, i) => {
+        const x = pad + (i / Math.max(data.length - 1, 1)) * (w - 2 * pad);
+        const y = hgt - pad - (d.count / max) * (hgt - 2 * pad);
+        return html`<circle cx=${x} cy=${y} r="3" fill="#e8a84c" />`;
+      })}
+      <text x=${pad} y=${hgt - 8} fill="#a0c4b8" font-size="10">${data[0].date}</text>
+      <text x=${w - pad} y=${hgt - 8} fill="#a0c4b8" font-size="10" text-anchor="end">${data[data.length - 1].date}</text>
+      <text x="8" y="20" fill="#a0c4b8" font-size="10">${max}</text>
+    </svg>
+  `;
+}
+
+function PieChart({ data }) {
+  const entries = Object.entries(data || {});
+  if (entries.length === 0) return html`<div class="empty">No data</div>`;
+  const total = entries.reduce((s, [, v]) => s + v, 0);
+  const colors = ['#e8a84c', '#7aa0d0', '#3a5a9a', '#b0c8e8', '#e06050'];
+  let angle = -Math.PI / 2;
+  const cx = 100, cy = 100, r = 80;
+  const slices = entries.map(([key, val], i) => {
+    const sliceAngle = (val / total) * 2 * Math.PI;
+    const x1 = cx + r * Math.cos(angle);
+    const y1 = cy + r * Math.sin(angle);
+    angle += sliceAngle;
+    const x2 = cx + r * Math.cos(angle);
+    const y2 = cy + r * Math.sin(angle);
+    const large = sliceAngle > Math.PI ? 1 : 0;
+    const path = `M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z`;
+    return { path, color: colors[i % colors.length], key, val };
+  });
+  return html`
+    <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+      <svg viewBox="0 0 200 200" style="width:200px;height:200px">
+        ${slices.map(s => html`<path d=${s.path} fill=${s.color} />`)}
+      </svg>
+      <div>
+        ${slices.map(s => html`
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <div style="width:12px;height:12px;background:${s.color};border-radius:2px"></div>
+            <span style="color:#e0d5c4">${s.key}: ${s.val}</span>
+          </div>
+        `)}
+      </div>
+    </div>
+  `;
+}
+
+function ShareList({ items, onDelete }) {
+  if (!items || items.length === 0) return html`<div class="empty">No shares</div>`;
+  return html`
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Date</th><th>Currency</th><th>Total</th><th>People</th><th></th></tr>
+      </thead>
+      <tbody>
+        ${items.map(item => html`
+          <tr>
+            <td><code>${item.share_id}</code></td>
+            <td>${(item.created_at || '').slice(0, 16).replace('T', ' ')}</td>
+            <td>${item.currency}</td>
+            <td class="amount">${item.total.toLocaleString()}</td>
+            <td>${item.participants_preview}</td>
+            <td>
+              <button class="outline" onClick=${() => window.open('https://split.redarch.dev/s/' + item.share_id, '_blank')}>View</button>
+              ${' '}
+              <button class="danger" onClick=${() => {
+                if (confirm('Delete share ' + item.share_id + '?')) onDelete(item.share_id);
+              }}>Delete</button>
+            </td>
+          </tr>
+        `)}
+      </tbody>
+    </table>
+  `;
+}
+
+function App() {
+  const [stats, setStats] = useState(null);
+  const [shares, setShares] = useState(null);
+  const [cf, setCf] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function loadAll() {
+    try {
+      const [s, sh, c] = await Promise.all([
+        api('/api/stats'),
+        api('/api/shares'),
+        api('/api/cloudflare/analytics').catch(() => ({ requests_24h: 0, blocked_24h: 0 })),
+      ]);
+      setStats(s);
+      setShares(sh.items);
+      setCf(c);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function deleteShare(id) {
+    try {
+      await fetch('/api/shares/' + id, { method: 'DELETE' });
+      loadAll();
+    } catch (e) {
+      alert('Delete failed: ' + e.message);
+    }
+  }
+
+  useEffect(() => { loadAll(); }, []);
+
+  if (error) return html`<div class="error">Error: ${error}</div>`;
+  if (!stats || !shares) return html`<div class="loading">Loading...</div>`;
+
+  return html`
+    <div>
+      <h2>📊 Stats</h2>
+      <div class="grid">
+        <${StatCard} label="Total Shares" value=${stats.total_shares} />
+        <${StatCard} label="CF Requests 24h" value=${cf?.requests_24h ?? '-'} />
+        <${StatCard} label="CF Blocked 24h" value=${cf?.blocked_24h ?? '-'} />
+        <${StatCard} label="Currencies" value=${Object.keys(stats.currency_breakdown).length} />
+      </div>
+
+      <h2>📈 Shares per Day</h2>
+      <div class="chart-container">
+        <${LineChart} data=${stats.shares_by_day} />
+      </div>
+
+      <h2>🥧 Currency Breakdown</h2>
+      <div class="chart-container">
+        <${PieChart} data=${stats.currency_breakdown} />
+      </div>
+
+      <h2>📋 Shares</h2>
+      <${ShareList} items=${shares} onDelete=${deleteShare} />
+    </div>
+  `;
+}
+
+render(h(App), document.getElementById('content'));
+</script>
+</body>
+</html>
+"""
+
+
 def _admin_render_dashboard() -> dict:
-    """Stub — Phase 4 replaces with the SPA HTML."""
     return {
         "statusCode": 200,
         "headers": {"Content-Type": "text/html; charset=utf-8"},
-        "body": "<html><body>Admin dashboard placeholder</body></html>",
+        "body": _ADMIN_SPA_HTML,
     }
 
 

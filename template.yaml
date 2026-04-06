@@ -101,6 +101,8 @@ Resources:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
                 - dynamodb:Query
+                - dynamodb:Scan
+                - dynamodb:DeleteItem
               Resource: !GetAtt GroupsTable.Arn
       Events:
         SplitSettle:

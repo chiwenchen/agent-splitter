@@ -1195,6 +1195,40 @@ def _verify_access_jwt(token: str):
     return payload
 
 
+def _admin_unauthorized(status: int, reason: str):
+    return {
+        "statusCode": status,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({"error": reason}),
+    }
+
+
+def _check_admin_auth(event: dict):
+    """
+    Verify admin authentication. Returns (claims_dict, None) on success
+    or (None, error_response) on failure.
+    """
+    if not os.environ.get("CF_ACCESS_TEAM_DOMAIN", "").strip():
+        return None, _admin_unauthorized(503, "admin not configured")
+    headers = event.get("headers") or {}
+    jwt = (
+        headers.get("cf-access-jwt-assertion")
+        or headers.get("Cf-Access-Jwt-Assertion")
+        or headers.get("CF-Access-Jwt-Assertion")
+    )
+    if not jwt:
+        return None, _admin_unauthorized(401, "missing access token")
+    claims = _verify_access_jwt(jwt)
+    if not claims:
+        return None, _admin_unauthorized(401, "invalid access token")
+    allowed_email = os.environ.get("CF_ALLOWED_EMAIL", "").strip().lower()
+    user_email = (claims.get("email") or "").strip().lower()
+    if allowed_email and user_email != allowed_email:
+        logger.warning(f"Admin access denied for email: {user_email}")
+        return None, _admin_unauthorized(403, "forbidden")
+    return claims, None
+
+
 def _esc(s: str) -> str:
     """HTML-escape user input to prevent XSS."""
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#x27;")
@@ -1310,6 +1344,12 @@ def lambda_handler(event, context):
     if path == "/v1/groups":
         return _handle_groups(event)
 
+    if path == "/admin" or path.startswith("/admin/"):
+        claims, err = _check_admin_auth(event)
+        if err:
+            return err
+        return _handle_admin(event, claims)
+
     return _handle_split_settle(event)
 
 
@@ -1410,6 +1450,25 @@ def _handle_share_page(event):
 
     html_out = _render_share_page(data["result"], data["created_at"], si)
     return {"statusCode": 200, "headers": {"Content-Type": "text/html"}, "body": html_out}
+
+
+def _handle_admin(event: dict, claims: dict) -> dict:
+    """Route /admin/* requests."""
+    path = event.get("rawPath", "")
+    method = event.get("requestContext", {}).get("http", {}).get("method", "GET")
+
+    if path == "/admin" or path == "/admin/":
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "text/html; charset=utf-8"},
+            "body": "<html><body>Admin (placeholder — Phase 4 will replace this)</body></html>",
+        }
+
+    return {
+        "statusCode": 404,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({"error": "not found"}),
+    }
 
 
 def _handle_split_settle(event):

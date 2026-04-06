@@ -74,6 +74,11 @@ Resources:
           ALCHEMY_SECRET_ARN: !Ref AlchemySecret
           PAYMENTS_TABLE: !Ref UsedPaymentsTable
           GROUPS_TABLE: !Ref GroupsTable
+          CF_ACCESS_TEAM_DOMAIN: ""
+          CF_ACCESS_AUD: ""
+          CF_ALLOWED_EMAIL: "cwchen2000@gmail.com"
+          CF_API_TOKEN_ARN: ""
+          CF_ZONE_ID: ""
       Policies:
         - AWSLambdaBasicExecutionRole
         - Statement:
@@ -83,6 +88,9 @@ Resources:
             - Effect: Allow
               Action: secretsmanager:GetSecretValue
               Resource: !Ref AlchemySecret
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:split-settle/cloudflare-api-token-*"
             - Effect: Allow
               Action:
                 - dynamodb:GetItem
@@ -142,6 +150,18 @@ Resources:
           Properties:
             Path: /s/{id}
             Method: get
+            ApiId: !Ref SplitSettleApi
+        AdminRoot:
+          Type: HttpApi
+          Properties:
+            Path: /admin
+            Method: get
+            ApiId: !Ref SplitSettleApi
+        AdminApi:
+          Type: HttpApi
+          Properties:
+            Path: /admin/{proxy+}
+            Method: any
             ApiId: !Ref SplitSettleApi
 
 Outputs:

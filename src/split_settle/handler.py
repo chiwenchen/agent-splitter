@@ -243,6 +243,31 @@ def _get_share(share_id: str) -> dict:
     }
 
 
+def _scan_all_shares() -> list:
+    """Scan GroupsTable for all SHARE# items. Returns list of raw DynamoDB items."""
+    import boto3
+    table = os.environ.get("GROUPS_TABLE", "")
+    if not table:
+        return []
+    client = boto3.client("dynamodb", region_name="ap-northeast-1")
+    items = []
+    last_key = None
+    while True:
+        kwargs = {
+            "TableName": table,
+            "FilterExpression": "begins_with(PK, :prefix)",
+            "ExpressionAttributeValues": {":prefix": {"S": "SHARE#"}},
+        }
+        if last_key:
+            kwargs["ExclusiveStartKey"] = last_key
+        resp = client.scan(**kwargs)
+        items.extend(resp.get("Items", []))
+        last_key = resp.get("LastEvaluatedKey")
+        if not last_key:
+            break
+    return items
+
+
 def _verify_payment(tx_hash: str, network: str) -> tuple:
     """Verify an on-chain USDC payment. Returns (is_valid, error_message)."""
     tx_hash = tx_hash.lower()
@@ -1464,10 +1489,52 @@ def _handle_admin(event: dict, claims: dict) -> dict:
             "body": "<html><body>Admin (placeholder — Phase 4 will replace this)</body></html>",
         }
 
+    if path == "/admin/api/stats" and method == "GET":
+        return _admin_stats()
+
     return {
         "statusCode": 404,
         "headers": {"Content-Type": "application/json"},
         "body": json.dumps({"error": "not found"}),
+    }
+
+
+def _admin_stats() -> dict:
+    """Aggregate share stats from DynamoDB."""
+    items = _scan_all_shares()
+    total = len(items)
+    currency_count = {}
+    currency_total = {}
+    day_count = {}
+    for item in items:
+        try:
+            result = json.loads(item.get("result", {}).get("S", "{}"))
+            currency = result.get("currency", "?")
+            amount = float(result.get("total_expenses", 0))
+            currency_count[currency] = currency_count.get(currency, 0) + 1
+            currency_total[currency] = currency_total.get(currency, 0) + amount
+            created = item.get("created_at", {}).get("S", "")
+            day = created[:10] if created else "?"
+            day_count[day] = day_count.get(day, 0) + 1
+        except Exception:
+            continue
+    avg_by_currency = {
+        c: round(currency_total[c] / currency_count[c], 2)
+        for c in currency_count
+    }
+    shares_by_day = sorted(
+        [{"date": d, "count": c} for d, c in day_count.items()],
+        key=lambda x: x["date"],
+    )
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({
+            "total_shares": total,
+            "currency_breakdown": currency_count,
+            "avg_amount_by_currency": avg_by_currency,
+            "shares_by_day": shares_by_day,
+        }),
     }
 
 

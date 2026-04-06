@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 import os
@@ -979,7 +980,7 @@ _DEAD_CODE_REMOVED = """
         ` : ''}
 
         <div style="text-align:center;margin-top:40px;font-size:11px;color:#444">
-          <a href="/docs" style="color:#555">API Docs</a> · Powered by x402
+          Split Senpai
         </div>
       `;
     }
@@ -1087,7 +1088,7 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
       <p>{{cta_q}}</p>
       <a href="/">{{cta_btn}}</a>
     </div>
-    <div class="footer"><a href="/docs">API Docs</a> · Powered by x402</div>
+    <div class="footer">Split Senpai</div>
   </div>
   <script>
   function filterMe(name) {
@@ -1114,6 +1115,84 @@ def _format_amount(currency: str, amount: float) -> str:
     """Format amount with currency-aware decimal places."""
     decimals = CURRENCY_DECIMALS.get(currency, 2)
     return f"{amount:,.{decimals}f}"
+
+
+# ---------- Cloudflare Access JWT verification ----------
+
+_jwks_cache: dict = {}
+
+def _b64url_decode(data: str) -> bytes:
+    """Base64-url decode with padding."""
+    padding = 4 - len(data) % 4
+    if padding != 4:
+        data += "=" * padding
+    return base64.urlsafe_b64decode(data)
+
+
+def _fetch_jwks(team_domain: str) -> dict:
+    """Fetch and cache JWKS from Cloudflare Access. 1h cache."""
+    global _jwks_cache
+    now = time.time()
+    if team_domain in _jwks_cache and _jwks_cache[team_domain]["expires"] > now:
+        return _jwks_cache[team_domain]["jwks"]
+    url = f"https://{team_domain}/cdn-cgi/access/certs"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            jwks = json.loads(resp.read())
+        _jwks_cache[team_domain] = {"jwks": jwks, "expires": now + 3600}
+        return jwks
+    except Exception as e:
+        logger.error(f"Failed to fetch JWKS: {e}")
+        return {"keys": []}
+
+
+def _verify_access_jwt(token: str):
+    """Verify CF Access JWT (RS256). Returns claims dict or None."""
+    team_domain = os.environ.get("CF_ACCESS_TEAM_DOMAIN", "").strip()
+    expected_aud = os.environ.get("CF_ACCESS_AUD", "").strip()
+    if not team_domain or not expected_aud:
+        return None
+    parts = token.split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        header = json.loads(_b64url_decode(parts[0]))
+        payload = json.loads(_b64url_decode(parts[1]))
+        signature = _b64url_decode(parts[2])
+    except Exception:
+        return None
+    kid = header.get("kid")
+    if not kid:
+        return None
+    jwks = _fetch_jwks(team_domain)
+    key_data = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
+    if not key_data:
+        return None
+    try:
+        from Crypto.PublicKey import RSA
+        from Crypto.Signature import pkcs1_15
+        from Crypto.Hash import SHA256
+        n = int.from_bytes(_b64url_decode(key_data["n"]), "big")
+        e = int.from_bytes(_b64url_decode(key_data["e"]), "big")
+        rsa_key = RSA.construct((n, e))
+        signing_input = f"{parts[0]}.{parts[1]}".encode()
+        h = SHA256.new(signing_input)
+        pkcs1_15.new(rsa_key).verify(h, signature)
+    except Exception as e:
+        logger.error(f"JWT verify failed: {e}")
+        return None
+    expected_iss = f"https://{team_domain}"
+    if payload.get("iss") != expected_iss:
+        return None
+    aud = payload.get("aud")
+    if isinstance(aud, list):
+        if expected_aud not in aud:
+            return None
+    elif aud != expected_aud:
+        return None
+    if payload.get("exp", 0) < time.time():
+        return None
+    return payload
 
 
 def _esc(s: str) -> str:

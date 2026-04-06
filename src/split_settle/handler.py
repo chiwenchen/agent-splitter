@@ -1502,6 +1502,9 @@ def _handle_admin(event: dict, claims: dict) -> dict:
     if path == "/admin/api/stats" and method == "GET":
         return _admin_stats()
 
+    if path == "/admin/api/cloudflare/analytics" and method == "GET":
+        return _admin_cf_analytics()
+
     if path == "/admin/api/shares" and method == "GET":
         return _admin_list_shares()
 
@@ -1594,6 +1597,100 @@ def _admin_delete_share(share_id: str) -> dict:
             "statusCode": 500,
             "headers": {"Content-Type": "application/json"},
             "body": json.dumps({"error": "delete failed"}),
+        }
+
+
+def _get_cf_api_token() -> str:
+    """Read Cloudflare API token from Secrets Manager."""
+    arn = os.environ.get("CF_API_TOKEN_ARN", "").strip()
+    if not arn:
+        return ""
+    if arn in _secret_cache:
+        return _secret_cache[arn]
+    import boto3
+    client = boto3.client("secretsmanager", region_name="ap-northeast-1")
+    try:
+        resp = client.get_secret_value(SecretId=arn)
+        token = resp["SecretString"].strip()
+        _secret_cache[arn] = token
+        return token
+    except Exception as e:
+        logger.error(f"Failed to fetch CF token: {e}")
+        return ""
+
+
+def _cf_graphql_query(url: str, token: str, query: str) -> dict:
+    """Execute a GraphQL query against the Cloudflare Analytics API."""
+    req = urllib.request.Request(
+        url,
+        data=json.dumps({"query": query}).encode(),
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read())
+
+
+def _admin_cf_analytics() -> dict:
+    arn = os.environ.get("CF_API_TOKEN_ARN", "").strip()
+    zone_id = os.environ.get("CF_ZONE_ID", "").strip()
+    if not arn or not zone_id:
+        return {
+            "statusCode": 503,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "cloudflare analytics not configured"}),
+        }
+    token = _get_cf_api_token()
+    if not token:
+        return {
+            "statusCode": 503,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "cloudflare token unavailable"}),
+        }
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    query = """
+    query {
+      viewer {
+        zones(filter: { zoneTag: "%s" }) {
+          httpRequests1dGroups(
+            limit: 1,
+            filter: { date: "%s" },
+            orderBy: [date_DESC]
+          ) {
+            sum { requests threats }
+            dimensions { date }
+          }
+        }
+      }
+    }
+    """ % (zone_id, today)
+    try:
+        resp = _cf_graphql_query("https://api.cloudflare.com/client/v4/graphql", token, query)
+        zones = resp.get("data", {}).get("viewer", {}).get("zones", [])
+        if not zones or not zones[0].get("httpRequests1dGroups"):
+            return {
+                "statusCode": 200,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"requests_24h": 0, "blocked_24h": 0}),
+            }
+        group = zones[0]["httpRequests1dGroups"][0]
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({
+                "requests_24h": group["sum"]["requests"],
+                "blocked_24h": group["sum"]["threats"],
+            }),
+        }
+    except Exception as e:
+        logger.error(f"CF analytics query failed: {e}")
+        return {
+            "statusCode": 500,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "analytics fetch failed"}),
         }
 
 

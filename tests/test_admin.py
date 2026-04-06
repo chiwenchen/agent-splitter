@@ -184,3 +184,41 @@ def test_admin_delete_share_calls_dynamodb(monkeypatch):
     response = handler.lambda_handler(_admin_event("/admin/api/shares/abc", "DELETE"), {})
     assert response["statusCode"] == 200
     assert deleted == ["abc"]
+
+
+def test_admin_cf_analytics_returns_503_when_unconfigured(monkeypatch):
+    _setup_admin_auth(monkeypatch)
+    monkeypatch.setenv("CF_API_TOKEN_ARN", "")
+    monkeypatch.setenv("CF_ZONE_ID", "")
+    response = handler.lambda_handler(_admin_event("/admin/api/cloudflare/analytics"), {})
+    assert response["statusCode"] == 503
+
+
+def test_admin_cf_analytics_calls_graphql(monkeypatch):
+    import json as _json
+    _setup_admin_auth(monkeypatch)
+    monkeypatch.setenv("CF_API_TOKEN_ARN", "arn:fake")
+    monkeypatch.setenv("CF_ZONE_ID", "fake-zone")
+    monkeypatch.setattr(handler, "_get_cf_api_token", lambda: "fake-token")
+
+    fake_response = {
+        "data": {
+            "viewer": {
+                "zones": [{
+                    "httpRequests1dGroups": [{
+                        "sum": {"requests": 1234, "threats": 56},
+                        "dimensions": {"date": "2026-04-06"},
+                    }],
+                }]
+            }
+        }
+    }
+    def fake_query(url, token, query):
+        return fake_response
+    monkeypatch.setattr(handler, "_cf_graphql_query", fake_query)
+
+    response = handler.lambda_handler(_admin_event("/admin/api/cloudflare/analytics"), {})
+    assert response["statusCode"] == 200
+    body = _json.loads(response["body"])
+    assert body["requests_24h"] == 1234
+    assert body["blocked_24h"] == 56

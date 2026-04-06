@@ -268,6 +268,20 @@ def _scan_all_shares() -> list:
     return items
 
 
+def _delete_share(share_id: str) -> None:
+    """Delete a share from DynamoDB by id."""
+    import boto3
+    table = os.environ.get("GROUPS_TABLE", "")
+    if not table:
+        raise ValueError("GROUPS_TABLE not configured")
+    client = boto3.client("dynamodb", region_name="ap-northeast-1")
+    client.delete_item(
+        TableName=table,
+        Key={"PK": {"S": f"SHARE#{share_id}"}, "SK": {"S": "RESULT"}},
+    )
+    logger.info(f"Admin deleted share: {share_id}")
+
+
 def _verify_payment(tx_hash: str, network: str) -> tuple:
     """Verify an on-chain USDC payment. Returns (is_valid, error_message)."""
     tx_hash = tx_hash.lower()
@@ -1483,20 +1497,104 @@ def _handle_admin(event: dict, claims: dict) -> dict:
     method = event.get("requestContext", {}).get("http", {}).get("method", "GET")
 
     if path == "/admin" or path == "/admin/":
-        return {
-            "statusCode": 200,
-            "headers": {"Content-Type": "text/html; charset=utf-8"},
-            "body": "<html><body>Admin (placeholder — Phase 4 will replace this)</body></html>",
-        }
+        return _admin_render_dashboard()
 
     if path == "/admin/api/stats" and method == "GET":
         return _admin_stats()
+
+    if path == "/admin/api/shares" and method == "GET":
+        return _admin_list_shares()
+
+    if path.startswith("/admin/api/shares/"):
+        share_id = path.split("/admin/api/shares/", 1)[1]
+        if not share_id or "/" in share_id:
+            return {
+                "statusCode": 400,
+                "headers": {"Content-Type": "application/json"},
+                "body": json.dumps({"error": "invalid share id"}),
+            }
+        if method == "GET":
+            return _admin_get_share(share_id)
+        if method == "DELETE":
+            return _admin_delete_share(share_id)
 
     return {
         "statusCode": 404,
         "headers": {"Content-Type": "application/json"},
         "body": json.dumps({"error": "not found"}),
     }
+
+
+def _admin_render_dashboard() -> dict:
+    """Stub — Phase 4 replaces with the SPA HTML."""
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "text/html; charset=utf-8"},
+        "body": "<html><body>Admin dashboard placeholder</body></html>",
+    }
+
+
+def _admin_list_shares() -> dict:
+    items = _scan_all_shares()
+    out = []
+    for item in items:
+        try:
+            pk = item.get("PK", {}).get("S", "")
+            share_id = pk.replace("SHARE#", "")
+            request_body = json.loads(item.get("request_body", {}).get("S", "{}"))
+            result = json.loads(item.get("result", {}).get("S", "{}"))
+            participants = request_body.get("participants", [])
+            preview = ", ".join(participants[:3])
+            if len(participants) > 3:
+                preview += f" +{len(participants) - 3}"
+            out.append({
+                "share_id": share_id,
+                "created_at": item.get("created_at", {}).get("S", ""),
+                "currency": result.get("currency", "?"),
+                "total": result.get("total_expenses", 0),
+                "participants_count": len(participants),
+                "participants_preview": preview,
+            })
+        except Exception:
+            continue
+    out.sort(key=lambda x: x["created_at"], reverse=True)
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({"items": out}),
+    }
+
+
+def _admin_get_share(share_id: str) -> dict:
+    data = _get_share(share_id)
+    if not data:
+        return {
+            "statusCode": 404,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "not found"}),
+        }
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps(data),
+    }
+
+
+def _admin_delete_share(share_id: str) -> dict:
+    try:
+        _delete_share(share_id)
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"deleted": True}),
+        }
+    except Exception as e:
+        logger.error(f"Failed to delete share {share_id}: {e}")
+        return {
+            "statusCode": 500,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "delete failed"}),
+        }
 
 
 def _admin_stats() -> dict:

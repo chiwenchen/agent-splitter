@@ -117,3 +117,70 @@ def test_admin_stats_aggregates_shares(monkeypatch):
     days = {d["date"]: d["count"] for d in body["shares_by_day"]}
     assert days["2026-04-06"] == 2
     assert days["2026-04-05"] == 1
+
+
+def _admin_event(path, method="GET"):
+    return {
+        "rawPath": path,
+        "headers": {"cf-access-jwt-assertion": "valid"},
+        "requestContext": {"http": {"method": method, "path": path}},
+    }
+
+
+def _setup_admin_auth(monkeypatch):
+    monkeypatch.setenv("CF_ACCESS_TEAM_DOMAIN", "test.cloudflareaccess.com")
+    monkeypatch.setenv("CF_ACCESS_AUD", "fake-aud")
+    monkeypatch.setenv("CF_ALLOWED_EMAIL", "owner@example.com")
+    monkeypatch.setattr(handler, "_verify_access_jwt", lambda t: {"email": "owner@example.com"})
+
+
+def test_admin_list_shares_returns_items(monkeypatch):
+    import json as _json
+    _setup_admin_auth(monkeypatch)
+    fake_items = [
+        {
+            "PK": {"S": "SHARE#abc"},
+            "request_body": {"S": '{"currency":"TWD","participants":["Alice","Bob","Carol"]}'},
+            "result": {"S": '{"currency":"TWD","total_expenses":1500}'},
+            "created_at": {"S": "2026-04-06T10:00:00Z"},
+        },
+    ]
+    monkeypatch.setattr(handler, "_scan_all_shares", lambda: fake_items)
+
+    response = handler.lambda_handler(_admin_event("/admin/api/shares"), {})
+    assert response["statusCode"] == 200
+    body = _json.loads(response["body"])
+    assert len(body["items"]) == 1
+    assert body["items"][0]["share_id"] == "abc"
+    assert body["items"][0]["currency"] == "TWD"
+    assert body["items"][0]["total"] == 1500
+    assert body["items"][0]["participants_count"] == 3
+    assert "Alice" in body["items"][0]["participants_preview"]
+
+
+def test_admin_get_share_returns_full_data(monkeypatch):
+    import json as _json
+    _setup_admin_auth(monkeypatch)
+    fake_data = {"request_body": {"currency": "TWD"}, "result": {"total_expenses": 100}, "created_at": "2026-04-06T10:00:00Z"}
+    monkeypatch.setattr(handler, "_get_share", lambda sid: fake_data if sid == "abc" else None)
+
+    response = handler.lambda_handler(_admin_event("/admin/api/shares/abc"), {})
+    assert response["statusCode"] == 200
+    body = _json.loads(response["body"])
+    assert body["request_body"]["currency"] == "TWD"
+
+
+def test_admin_get_share_returns_404_for_missing(monkeypatch):
+    _setup_admin_auth(monkeypatch)
+    monkeypatch.setattr(handler, "_get_share", lambda sid: None)
+    response = handler.lambda_handler(_admin_event("/admin/api/shares/missing"), {})
+    assert response["statusCode"] == 404
+
+
+def test_admin_delete_share_calls_dynamodb(monkeypatch):
+    _setup_admin_auth(monkeypatch)
+    deleted = []
+    monkeypatch.setattr(handler, "_delete_share", lambda sid: deleted.append(sid))
+    response = handler.lambda_handler(_admin_event("/admin/api/shares/abc", "DELETE"), {})
+    assert response["statusCode"] == 200
+    assert deleted == ["abc"]

@@ -14,6 +14,20 @@ Resources:
       DefaultRouteSettings:
         ThrottlingRateLimit: 10
         ThrottlingBurstLimit: 20
+      CorsConfiguration:
+        AllowOrigins:
+          - "https://split.redarch.dev"
+          - "https://split-admin.redarch.dev"
+        AllowMethods:
+          - GET
+          - POST
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - X-Api-Key
+          - Cf-Access-Jwt-Assertion
+        MaxAge: 300
 
   ApiKeySecret:
     Type: AWS::SecretsManager::Secret

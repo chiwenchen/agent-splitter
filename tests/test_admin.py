@@ -122,7 +122,10 @@ def test_admin_stats_aggregates_shares(monkeypatch):
 def _admin_event(path, method="GET"):
     return {
         "rawPath": path,
-        "headers": {"cf-access-jwt-assertion": "valid"},
+        "headers": {
+            "cf-access-jwt-assertion": "valid",
+            "origin": "https://split-admin.redarch.dev",
+        },
         "requestContext": {"http": {"method": method, "path": path}},
     }
 
@@ -162,9 +165,9 @@ def test_admin_get_share_returns_full_data(monkeypatch):
     import json as _json
     _setup_admin_auth(monkeypatch)
     fake_data = {"request_body": {"currency": "TWD"}, "result": {"total_expenses": 100}, "created_at": "2026-04-06T10:00:00Z"}
-    monkeypatch.setattr(handler, "_get_share", lambda sid: fake_data if sid == "abc" else None)
+    monkeypatch.setattr(handler, "_get_share", lambda sid: fake_data if sid == "abcdef" else None)
 
-    response = handler.lambda_handler(_admin_event("/admin/api/shares/abc"), {})
+    response = handler.lambda_handler(_admin_event("/admin/api/shares/abcdef"), {})
     assert response["statusCode"] == 200
     body = _json.loads(response["body"])
     assert body["request_body"]["currency"] == "TWD"
@@ -173,7 +176,7 @@ def test_admin_get_share_returns_full_data(monkeypatch):
 def test_admin_get_share_returns_404_for_missing(monkeypatch):
     _setup_admin_auth(monkeypatch)
     monkeypatch.setattr(handler, "_get_share", lambda sid: None)
-    response = handler.lambda_handler(_admin_event("/admin/api/shares/missing"), {})
+    response = handler.lambda_handler(_admin_event("/admin/api/shares/missing"), {})  # 7 chars, valid
     assert response["statusCode"] == 404
 
 
@@ -181,9 +184,9 @@ def test_admin_delete_share_calls_dynamodb(monkeypatch):
     _setup_admin_auth(monkeypatch)
     deleted = []
     monkeypatch.setattr(handler, "_delete_share", lambda sid: deleted.append(sid))
-    response = handler.lambda_handler(_admin_event("/admin/api/shares/abc", "DELETE"), {})
+    response = handler.lambda_handler(_admin_event("/admin/api/shares/abcdef", "DELETE"), {})
     assert response["statusCode"] == 200
-    assert deleted == ["abc"]
+    assert deleted == ["abcdef"]
 
 
 def test_admin_cf_analytics_returns_503_when_unconfigured(monkeypatch):
@@ -213,7 +216,7 @@ def test_admin_cf_analytics_calls_graphql(monkeypatch):
             }
         }
     }
-    def fake_query(url, token, query):
+    def fake_query(url, token, query, variables=None):
         return fake_response
     monkeypatch.setattr(handler, "_cf_graphql_query", fake_query)
 

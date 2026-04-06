@@ -26,6 +26,27 @@ TRANSFER_SELECTOR = "a9059cbb"
 _secret_cache: dict = {}
 _HEX_CHARS = set("0123456789abcdefABCDEF")
 
+SECURE_HTML_HEADERS = {
+    "Content-Type": "text/html; charset=utf-8",
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+}
+
+SECURE_JSON_HEADERS = {
+    "Content-Type": "application/json",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+}
+
+_SHARE_ID_RE = re.compile(r'^[A-Za-z0-9_-]{6,32}$')
+
+
+def _sanitize_log(value) -> str:
+    """Strip control chars from log values to prevent log injection."""
+    return re.sub(r'[\r\n\t\x00-\x1f]', ' ', str(value))[:200]
+
 
 def _get_secret(env_var: str, arn_var: str) -> str:
     """Get a secret from env var or Secrets Manager. Cached globally."""
@@ -196,8 +217,8 @@ def _get_group_participants(group_id: str) -> dict:
 
 
 def _generate_share_id() -> str:
-    """Generate an 8-char URL-safe share ID."""
-    return secrets.token_urlsafe(6)[:8]
+    """Generate a 22-char URL-safe share ID with 128-bit entropy."""
+    return secrets.token_urlsafe(16)
 
 
 def _save_share(share_id: str, request_body: dict, result: dict) -> None:
@@ -244,7 +265,7 @@ def _get_share(share_id: str) -> dict:
 
 
 def _scan_all_shares() -> list:
-    """Scan GroupsTable for all SHARE# items. Returns list of raw DynamoDB items."""
+    """Scan GroupsTable for all SHARE# items. Returns list of raw DynamoDB items (capped at 1000)."""
     import boto3
     table = os.environ.get("GROUPS_TABLE", "")
     if not table:
@@ -252,20 +273,22 @@ def _scan_all_shares() -> list:
     client = boto3.client("dynamodb", region_name="ap-northeast-1")
     items = []
     last_key = None
+    MAX_ITEMS = 1000
     while True:
         kwargs = {
             "TableName": table,
             "FilterExpression": "begins_with(PK, :prefix)",
             "ExpressionAttributeValues": {":prefix": {"S": "SHARE#"}},
+            "Limit": 100,
         }
         if last_key:
             kwargs["ExclusiveStartKey"] = last_key
         resp = client.scan(**kwargs)
         items.extend(resp.get("Items", []))
         last_key = resp.get("LastEvaluatedKey")
-        if not last_key:
+        if not last_key or len(items) >= MAX_ITEMS:
             break
-    return items
+    return items[:MAX_ITEMS]
 
 
 def _delete_share(share_id: str) -> None:
@@ -279,7 +302,7 @@ def _delete_share(share_id: str) -> None:
         TableName=table,
         Key={"PK": {"S": f"SHARE#{share_id}"}, "SK": {"S": "RESULT"}},
     )
-    logger.info(f"Admin deleted share: {share_id}")
+    logger.info(f"Admin deleted share: {_sanitize_log(share_id)}")
 
 
 def _verify_payment(tx_hash: str, network: str) -> tuple:
@@ -359,7 +382,7 @@ def _payment_required_response(reason: str = "") -> dict:
     }
     if reason:
         body["reason"] = reason
-    return {"statusCode": 402, "headers": {"Content-Type": "application/json"}, "body": json.dumps(body)}
+    return {"statusCode": 402, "headers": SECURE_JSON_HEADERS, "body": json.dumps(body)}
 
 
 OPENAPI_SCHEMA = {
@@ -375,7 +398,7 @@ OPENAPI_SCHEMA = {
     },
     "servers": [
         {
-            "url": "https://sfd9k548wj.execute-api.ap-northeast-1.amazonaws.com",
+            "url": "https://split.redarch.dev",
             "description": "Production",
         }
     ],
@@ -1059,6 +1082,8 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; script-src 'self' 'unsafe-inline'">
   <title>Split Senpai - {{title}}</title>
   <meta property="og:title" content="{{og_title}}" />
   <meta property="og:description" content="{{og_desc}}" />
@@ -1237,7 +1262,7 @@ def _verify_access_jwt(token: str):
 def _admin_unauthorized(status: int, reason: str):
     return {
         "statusCode": status,
-        "headers": {"Content-Type": "application/json"},
+        "headers": SECURE_JSON_HEADERS,
         "body": json.dumps({"error": reason}),
     }
 
@@ -1263,7 +1288,7 @@ def _check_admin_auth(event: dict):
     allowed_email = os.environ.get("CF_ALLOWED_EMAIL", "").strip().lower()
     user_email = (claims.get("email") or "").strip().lower()
     if allowed_email and user_email != allowed_email:
-        logger.warning(f"Admin access denied for email: {user_email}")
+        logger.warning(f"Admin access denied for email: {_sanitize_log(user_email)}")
         return None, _admin_unauthorized(403, "forbidden")
     return claims, None
 
@@ -1323,7 +1348,7 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None) -> s
 
 _METHOD_NOT_ALLOWED = {
     "statusCode": 405,
-    "headers": {"Content-Type": "application/json"},
+    "headers": SECURE_JSON_HEADERS,
     "body": json.dumps({"error": "Method Not Allowed"}),
 }
 
@@ -1349,28 +1374,28 @@ def lambda_handler(event, context):
     if path == "/openapi.json":
         return {
             "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps(OPENAPI_SCHEMA),
         }
 
     if path == "/health":
         return {
             "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps({"status": "ok"}),
         }
 
     if path == "/docs":
         return {
             "statusCode": 200,
-            "headers": {"Content-Type": "text/html"},
+            "headers": SECURE_HTML_HEADERS,
             "body": SWAGGER_HTML,
         }
 
     if path == "/":
         return {
             "statusCode": 200,
-            "headers": {"Content-Type": "text/html"},
+            "headers": SECURE_HTML_HEADERS,
             "body": APP_HTML,
         }
 
@@ -1403,7 +1428,7 @@ def _handle_groups(event):
         if provided != api_key:
             return {
                 "statusCode": 403,
-                "headers": {"Content-Type": "application/json"},
+                "headers": SECURE_JSON_HEADERS,
                 "body": json.dumps({"error": "Forbidden: invalid or missing x-api-key"}),
             }
 
@@ -1412,26 +1437,26 @@ def _handle_groups(event):
         result = _create_group(body.get("group_id", ""), body.get("participants", []))
         return {
             "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps(result),
         }
     except GroupExistsError as e:
         return {
             "statusCode": 409,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps({"error": str(e), "code": "GROUP_EXISTS"}),
         }
     except ValueError as e:
         return {
             "statusCode": 400,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps({"error": str(e)}),
         }
     except Exception:
         logger.exception("Unhandled error in _handle_groups")
         return {
             "statusCode": 500,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps({"error": "Internal server error"}),
         }
 
@@ -1439,28 +1464,37 @@ def _handle_groups(event):
 def _handle_share(event):
     """POST /v1/share — public endpoint, saves split result, returns share link."""
     try:
-        body = json.loads(event.get("body") or "{}")
+        raw_body = event.get("body") or ""
+        if len(raw_body.encode("utf-8")) > 32 * 1024:  # 32KB
+            return {
+                "statusCode": 413,
+                "headers": SECURE_JSON_HEADERS,
+                "body": json.dumps({"error": "request body too large"}),
+            }
+        body = json.loads(raw_body) if raw_body else {}
         lang = body.pop("lang", "en")
+        if lang not in ("en", "zh-TW", "ja"):
+            lang = "en"
         result = split_settle(body)
         share_id = _generate_share_id()
         _save_share(share_id, body, result)
         url = f"/s/{share_id}" + (f"?lang={lang}" if lang != "en" else "")
         return {
             "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps({"share_id": share_id, "url": url}),
         }
     except ValueError as e:
         return {
             "statusCode": 400,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps({"error": str(e)}),
         }
     except Exception:
         logger.exception("Unhandled error in _handle_share")
         return {
             "statusCode": 500,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps({"error": "Internal server error"}),
         }
 
@@ -1476,19 +1510,19 @@ def _handle_share_page(event):
     """GET /s/{id} — render shared result page."""
     path = event.get("rawPath", "")
     share_id = path.split("/s/", 1)[-1].split("?")[0] if "/s/" in path else ""
-    if not share_id:
-        return {"statusCode": 404, "headers": {"Content-Type": "text/html"}, "body": NOT_FOUND_HTML}
+    if not share_id or not _SHARE_ID_RE.match(share_id):
+        return {"statusCode": 404, "headers": SECURE_HTML_HEADERS, "body": "<html><body>Not found</body></html>"}
 
     data = _get_share(share_id)
     if not data or data["ttl_expiry"] < time.time():
-        return {"statusCode": 404, "headers": {"Content-Type": "text/html"}, "body": NOT_FOUND_HTML}
+        return {"statusCode": 404, "headers": SECURE_HTML_HEADERS, "body": NOT_FOUND_HTML}
 
     qs = event.get("queryStringParameters") or {}
     lang = qs.get("lang", "en")
     si = _SHARE_I18N.get(lang, _SHARE_I18N["en"])
 
     html_out = _render_share_page(data["result"], data["created_at"], si)
-    return {"statusCode": 200, "headers": {"Content-Type": "text/html"}, "body": html_out}
+    return {"statusCode": 200, "headers": SECURE_HTML_HEADERS, "body": html_out}
 
 
 def _handle_admin(event: dict, claims: dict) -> dict:
@@ -1510,20 +1544,29 @@ def _handle_admin(event: dict, claims: dict) -> dict:
 
     if path.startswith("/admin/api/shares/"):
         share_id = path.split("/admin/api/shares/", 1)[1]
-        if not share_id or "/" in share_id:
+        if not _SHARE_ID_RE.match(share_id):
             return {
                 "statusCode": 400,
-                "headers": {"Content-Type": "application/json"},
+                "headers": SECURE_JSON_HEADERS,
                 "body": json.dumps({"error": "invalid share id"}),
             }
         if method == "GET":
             return _admin_get_share(share_id)
         if method == "DELETE":
+            # CSRF: verify Origin header
+            headers = event.get("headers") or {}
+            origin = headers.get("origin") or headers.get("Origin") or ""
+            if origin not in ("https://split-admin.redarch.dev", "https://split.redarch.dev"):
+                return {
+                    "statusCode": 403,
+                    "headers": SECURE_JSON_HEADERS,
+                    "body": json.dumps({"error": "cross-origin request blocked"}),
+                }
             return _admin_delete_share(share_id)
 
     return {
         "statusCode": 404,
-        "headers": {"Content-Type": "application/json"},
+        "headers": SECURE_JSON_HEADERS,
         "body": json.dumps({"error": "not found"}),
     }
 
@@ -1763,7 +1806,7 @@ render(h(App), document.getElementById('content'));
 def _admin_render_dashboard() -> dict:
     return {
         "statusCode": 200,
-        "headers": {"Content-Type": "text/html; charset=utf-8"},
+        "headers": SECURE_HTML_HEADERS,
         "body": _ADMIN_SPA_HTML,
     }
 
@@ -1794,7 +1837,7 @@ def _admin_list_shares() -> dict:
     out.sort(key=lambda x: x["created_at"], reverse=True)
     return {
         "statusCode": 200,
-        "headers": {"Content-Type": "application/json"},
+        "headers": SECURE_JSON_HEADERS,
         "body": json.dumps({"items": out}),
     }
 
@@ -1804,12 +1847,12 @@ def _admin_get_share(share_id: str) -> dict:
     if not data:
         return {
             "statusCode": 404,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps({"error": "not found"}),
         }
     return {
         "statusCode": 200,
-        "headers": {"Content-Type": "application/json"},
+        "headers": SECURE_JSON_HEADERS,
         "body": json.dumps(data),
     }
 
@@ -1819,14 +1862,14 @@ def _admin_delete_share(share_id: str) -> dict:
         _delete_share(share_id)
         return {
             "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps({"deleted": True}),
         }
     except Exception as e:
         logger.error(f"Failed to delete share {share_id}: {e}")
         return {
             "statusCode": 500,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps({"error": "delete failed"}),
         }
 
@@ -1850,11 +1893,14 @@ def _get_cf_api_token() -> str:
         return ""
 
 
-def _cf_graphql_query(url: str, token: str, query: str) -> dict:
+def _cf_graphql_query(url: str, token: str, query: str, variables: dict = None) -> dict:
     """Execute a GraphQL query against the Cloudflare Analytics API."""
+    payload = {"query": query}
+    if variables:
+        payload["variables"] = variables
     req = urllib.request.Request(
         url,
-        data=json.dumps({"query": query}).encode(),
+        data=json.dumps(payload).encode(),
         headers={
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
@@ -1871,46 +1917,47 @@ def _admin_cf_analytics() -> dict:
     if not arn or not zone_id:
         return {
             "statusCode": 503,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps({"error": "cloudflare analytics not configured"}),
         }
     token = _get_cf_api_token()
     if not token:
         return {
             "statusCode": 503,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps({"error": "cloudflare token unavailable"}),
         }
     today = time.strftime("%Y-%m-%d", time.gmtime())
     query = """
-    query {
-      viewer {
-        zones(filter: { zoneTag: "%s" }) {
-          httpRequests1dGroups(
-            limit: 1,
-            filter: { date: "%s" },
-            orderBy: [date_DESC]
-          ) {
-            sum { requests threats }
-            dimensions { date }
-          }
-        }
+query($zoneTag: String!, $date: String!) {
+  viewer {
+    zones(filter: { zoneTag: $zoneTag }) {
+      httpRequests1dGroups(
+        limit: 1,
+        filter: { date: $date },
+        orderBy: [date_DESC]
+      ) {
+        sum { requests threats }
+        dimensions { date }
       }
     }
-    """ % (zone_id, today)
+  }
+}
+"""
+    variables = {"zoneTag": zone_id, "date": today}
     try:
-        resp = _cf_graphql_query("https://api.cloudflare.com/client/v4/graphql", token, query)
+        resp = _cf_graphql_query("https://api.cloudflare.com/client/v4/graphql", token, query, variables)
         zones = resp.get("data", {}).get("viewer", {}).get("zones", [])
         if not zones or not zones[0].get("httpRequests1dGroups"):
             return {
                 "statusCode": 200,
-                "headers": {"Content-Type": "application/json"},
+                "headers": SECURE_JSON_HEADERS,
                 "body": json.dumps({"requests_24h": 0, "blocked_24h": 0}),
             }
         group = zones[0]["httpRequests1dGroups"][0]
         return {
             "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps({
                 "requests_24h": group["sum"]["requests"],
                 "blocked_24h": group["sum"]["threats"],
@@ -1920,7 +1967,7 @@ def _admin_cf_analytics() -> dict:
         logger.error(f"CF analytics query failed: {e}")
         return {
             "statusCode": 500,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps({"error": "analytics fetch failed"}),
         }
 
@@ -1954,7 +2001,7 @@ def _admin_stats() -> dict:
     )
     return {
         "statusCode": 200,
-        "headers": {"Content-Type": "application/json"},
+        "headers": SECURE_JSON_HEADERS,
         "body": json.dumps({
             "total_shares": total,
             "currency_breakdown": currency_count,
@@ -1990,7 +2037,7 @@ def _handle_split_settle(event):
             if provided != api_key:
                 return {
                     "statusCode": 403,
-                    "headers": {"Content-Type": "application/json"},
+                    "headers": SECURE_JSON_HEADERS,
                     "body": json.dumps({"error": "Forbidden: invalid or missing x-api-key"}),
                 }
         else:
@@ -2002,20 +2049,20 @@ def _handle_split_settle(event):
         result = split_settle(body)
         return {
             "statusCode": 200,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps(result),
         }
     except ValueError as e:
         return {
             "statusCode": 400,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps({"error": str(e)}),
         }
     except Exception:
         logger.exception("Unhandled error in _handle_split_settle")
         return {
             "statusCode": 500,
-            "headers": {"Content-Type": "application/json"},
+            "headers": SECURE_JSON_HEADERS,
             "body": json.dumps({"error": "Internal server error"}),
         }
 
@@ -2028,6 +2075,8 @@ def split_settle(data: dict) -> dict:
 
     if not currency:
         raise ValueError("currency is required")
+    if len(currency) > 10:
+        raise ValueError("currency code too long")
     if len(participants) < 2:
         raise ValueError("at least 2 participants required")
     if len(participants) > 20:
@@ -2037,8 +2086,10 @@ def split_settle(data: dict) -> dict:
     for p in participants:
         if len(p) > 50:
             raise ValueError(f"participant name too long: max 50 chars")
-    if len(expenses) < 1:
+    if not isinstance(expenses, list) or len(expenses) < 1:
         raise ValueError("at least 1 expense required")
+    if len(expenses) > 100:
+        raise ValueError("expenses cannot exceed 100")
 
     participant_set = set(participants)
     total_paid_cents = {p: 0 for p in participants}
@@ -2046,6 +2097,9 @@ def split_settle(data: dict) -> dict:
     total_cents = 0
 
     for expense in expenses:
+        desc = expense.get("description", "") or ""
+        if len(desc) > 200:
+            raise ValueError("description too long")
         paid_by = expense.get("paid_by")
         amount = expense.get("amount")
         split_among = expense.get("split_among", [])

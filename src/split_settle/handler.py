@@ -1586,7 +1586,7 @@ _ADMIN_SPA_HTML = r"""<!DOCTYPE html>
 <body>
 <div id="app" class="container">
   <h1>分帳仙貝 Admin</h1>
-  <div id="content" class="loading">Loading...</div>
+  <div id="content"></div>
 </div>
 <script type="module">
 import { h, render } from 'https://esm.sh/preact@10.19.0';

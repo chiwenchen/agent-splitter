@@ -110,3 +110,50 @@ def test_put_then_get_account(ddb):
     get = _invoke("GET", "/v1/share/abc12345/accounts")
     assert get["statusCode"] == 200
     assert json.loads(get["body"]) == {"Alice": "國泰 700-12345678"}
+
+
+def test_put_unknown_participant(ddb):
+    _seed_share()
+    resp = _invoke(
+        "PUT",
+        "/v1/share/abc12345/accounts/Charlie",
+        body={"account_text": "x"},
+        headers={"x-device-id": "d"},
+    )
+    assert resp["statusCode"] == 400
+
+
+def test_put_too_long(ddb):
+    _seed_share()
+    resp = _invoke(
+        "PUT",
+        "/v1/share/abc12345/accounts/Alice",
+        body={"account_text": "x" * 501},
+        headers={"x-device-id": "d"},
+    )
+    assert resp["statusCode"] == 400
+
+
+def test_put_missing_share(ddb):
+    resp = _invoke(
+        "PUT",
+        "/v1/share/nope0000/accounts/Alice",
+        body={"account_text": "x"},
+        headers={"x-device-id": "d"},
+    )
+    assert resp["statusCode"] == 404
+
+
+def test_put_expired_share(ddb, monkeypatch):
+    _seed_share()
+    real_time = time.time
+    monkeypatch.setattr(
+        handler.time, "time", lambda: real_time() + 86400 * 31
+    )
+    resp = _invoke(
+        "PUT",
+        "/v1/share/abc12345/accounts/Alice",
+        body={"account_text": "x"},
+        headers={"x-device-id": "d"},
+    )
+    assert resp["statusCode"] == 404

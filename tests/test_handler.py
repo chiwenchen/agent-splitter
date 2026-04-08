@@ -1283,7 +1283,7 @@ def test_render_share_page_no_xss_via_participant_name():
         "settlements": [{"from": malicious, "to": "Alice", "amount": 100}],
         "summary": [{"participant": malicious}, {"participant": "Alice"}],
     }
-    si = {"title": "T", "iam": "x", "all": "All", "cta_q": "?", "cta": "Go"}
+    si = {"title": "T", "cta_q": "?", "cta": "Go"}
     html = handler._render_share_page(result, "", si)
     # No inline onclick=filterMe(...) on rendered buttons — event delegation only
     assert "onclick=\"filterMe" not in html

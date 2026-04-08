@@ -1417,8 +1417,10 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
 
     function renderSettlements() {
       var rows = document.querySelectorAll('.settlement');
-      rows.forEach(function(row, i) {
-        var s = settlements[i];
+      rows.forEach(function(row) {
+        var idx = parseInt(row.dataset.idx, 10);
+        var s = settlements[idx];
+        if (!s) return;
         var visible;
         if (!isRealIdentity() || showAll) {
           visible = true;
@@ -1521,7 +1523,8 @@ def _esc(s: str) -> str:
 def _render_share_page(result: dict, created_at: str = "", si: dict = None,
                        share_id: str = "") -> str:
     """Render the share page HTML from a split result."""
-    currency = _esc(result.get("currency", ""))
+    currency_raw = result.get("currency", "")
+    currency = _esc(currency_raw)
     total = result.get("total_expenses", 0)
     settlements = result.get("settlements", [])
     summary = result.get("summary", [])
@@ -1570,7 +1573,7 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None,
     settlements_html = ""
     for i, s in enumerate(settlements):
         settlements_html += (
-            f'<div class="settlement" style="--i:{i}">'
+            f'<div class="settlement" data-idx="{i}" style="--i:{i}">'
             f'<div class="sett-main">'
             f'<span><span class="from">{_esc(s["from"])}</span> → '
             f'<span class="to">{_esc(s["to"])}</span></span>'
@@ -1581,9 +1584,9 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None,
 
     s_plural = "s" if n_sett != 1 else ""
     replacements = {
-        "{{title}}": f"{currency} {total:,.0f} split",
-        "{{og_title}}": f"Split: {currency} {total:,.0f} between {len(names)} people",
-        "{{og_desc}}": f"{n_sett} transfer{s_plural} needed to settle",
+        "{{title}}": _esc(f"{currency_raw} {total:,.0f} split"),
+        "{{og_title}}": _esc(f"Split: {currency_raw} {total:,.0f} between {len(names)} people"),
+        "{{og_desc}}": _esc(f"{n_sett} transfer{s_plural} needed to settle"),
         "{{date}}": _esc(created_at[:10]) if created_at else "",
         "{{participants}}": ", ".join(names),
         "{{currency}}": currency,

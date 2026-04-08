@@ -1531,7 +1531,7 @@ _HTML_SECURITY_HEADERS = {
         "default-src 'self'; "
         "script-src 'self' https://esm.sh https://unpkg.com 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:; "
+        "img-src 'self' data: https://api.qrserver.com; "
         "connect-src 'self'; "
         "frame-ancestors 'none'; "
         "base-uri 'none'"

@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import time
+import urllib.parse
 import urllib.request
 
 logger = logging.getLogger(__name__)
@@ -340,7 +341,7 @@ def _handle_share_accounts(event):
             "body": json.dumps({"error": "not found"}),
         }
     share_id = parts[0]
-    participant = parts[2] if len(parts) >= 3 and parts[2] else None
+    participant = urllib.parse.unquote(parts[2]) if len(parts) >= 3 and parts[2] else None
 
     share = _get_share(share_id)
     if not share or share["ttl_expiry"] < time.time():
@@ -1476,7 +1477,10 @@ def lambda_handler(event, context):
                 "body": json.dumps({"error": "internal server error"}),
             }
 
-    if path.startswith("/v1/share/") and "/accounts" in path:
+    _share_parts = path.split("/")
+    # ['', 'v1', 'share', '<id>', 'accounts', ...]
+    if (len(_share_parts) >= 5 and _share_parts[1] == "v1"
+            and _share_parts[2] == "share" and _share_parts[4] == "accounts"):
         return _handle_share_accounts(event)
 
     if path.startswith("/v1/share/"):

@@ -197,3 +197,24 @@ def test_last_write_wins(ddb):
 
     # Confirm updated_by audit field on the last write
     assert _fake_accounts["abc12345"]["Alice"]["updated_by"] == "dev-2"
+
+
+def test_put_participant_with_space(ddb):
+    _seed_share(participants=("Alice Chen", "Bob"))
+    resp = _invoke(
+        "PUT",
+        "/v1/share/abc12345/accounts/Alice%20Chen",
+        body={"account_text": "x"},
+        headers={"x-device-id": "d"},
+    )
+    assert resp["statusCode"] == 200
+    get = _invoke("GET", "/v1/share/abc12345/accounts")
+    assert json.loads(get["body"]) == {"Alice Chen": "x"}
+
+
+def test_router_does_not_match_unrelated_share_id(ddb):
+    # share_id literally containing "accounts" must NOT route to the accounts
+    # handler — it should fall through to _handle_share_json (404 because the
+    # share doesn't exist).
+    resp = _invoke("GET", "/v1/share/accountsfoo")
+    assert resp["body"] != "{}"

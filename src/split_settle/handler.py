@@ -1321,10 +1321,18 @@ def lambda_handler(event, context):
         }
 
     if path == "/admin" or path.startswith("/admin/"):
-        claims, err = _check_admin_auth(event)
-        if err:
-            return err
-        return _handle_admin(event, claims)
+        try:
+            claims, err = _check_admin_auth(event)
+            if err:
+                return err
+            return _handle_admin(event, claims)
+        except Exception:
+            logger.exception("admin handler crashed")
+            return {
+                "statusCode": 500,
+                "headers": SECURE_JSON_HEADERS,
+                "body": json.dumps({"error": "internal server error"}),
+            }
 
     if path.startswith("/v1/share/"):
         return _handle_share_json(event)
@@ -1699,6 +1707,14 @@ SECURE_JSON_HEADERS = {
     "Referrer-Policy": "no-referrer",
 }
 
+SECURE_HTML_HEADERS = {
+    "Content-Type": "text/html; charset=utf-8",
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+}
+
 _SHARE_ID_RE = re.compile(r'^[A-Za-z0-9_-]{6,32}$')
 
 
@@ -1764,6 +1780,7 @@ def _format_amount(currency: str, amount: float) -> str:
 
 # ---------- Cloudflare Access JWT verification ----------
 
+_jwks_cache: dict = {}
 
 
 def _b64url_decode(data: str) -> bytes:

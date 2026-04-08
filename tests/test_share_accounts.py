@@ -177,3 +177,23 @@ def test_delete_account(ddb):
     assert json.loads(get["body"]) == {}
 
 
+def test_last_write_wins(ddb):
+    _seed_share()
+    _invoke(
+        "PUT",
+        "/v1/share/abc12345/accounts/Alice",
+        body={"account_text": "first"},
+        headers={"x-device-id": "dev-1"},
+    )
+    _invoke(
+        "PUT",
+        "/v1/share/abc12345/accounts/Alice",
+        body={"account_text": "second"},
+        headers={"x-device-id": "dev-2"},
+    )
+
+    get = _invoke("GET", "/v1/share/abc12345/accounts")
+    assert json.loads(get["body"]) == {"Alice": "second"}
+
+    # Confirm updated_by audit field on the last write
+    assert _fake_accounts["abc12345"]["Alice"]["updated_by"] == "dev-2"

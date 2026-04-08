@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 import os
@@ -1319,6 +1320,12 @@ def lambda_handler(event, context):
             }]),
         }
 
+    if path == "/admin" or path.startswith("/admin/"):
+        claims, err = _check_admin_auth(event)
+        if err:
+            return err
+        return _handle_admin(event, claims)
+
     if path.startswith("/v1/share/"):
         return _handle_share_json(event)
 
@@ -1682,3 +1689,676 @@ def _calculate_settlements(balances: dict) -> list:
             j += 1
 
     return settlements
+# ============================================================
+# Admin dashboard — ported from feat/dev-1/issue-26
+# ============================================================
+
+SECURE_JSON_HEADERS = {
+    "Content-Type": "application/json",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+}
+
+_SHARE_ID_RE = re.compile(r'^[A-Za-z0-9_-]{6,32}$')
+
+
+def _sanitize_log(value) -> str:
+    """Strip control chars from log values to prevent log injection."""
+    return re.sub(r'[\r\n\t\x00-\x1f]', ' ', str(value))[:200]
+
+
+def _scan_all_shares() -> list:
+    """Scan GroupsTable for all SHARE# items. Returns list of raw DynamoDB items (capped at 1000)."""
+    import boto3
+    table = os.environ.get("GROUPS_TABLE", "")
+    if not table:
+        return []
+    client = boto3.client("dynamodb", region_name="ap-northeast-1")
+    items = []
+    last_key = None
+    MAX_ITEMS = 1000
+    while True:
+        kwargs = {
+            "TableName": table,
+            "FilterExpression": "begins_with(PK, :prefix)",
+            "ExpressionAttributeValues": {":prefix": {"S": "SHARE#"}},
+            "Limit": 100,
+        }
+        if last_key:
+            kwargs["ExclusiveStartKey"] = last_key
+        resp = client.scan(**kwargs)
+        items.extend(resp.get("Items", []))
+        last_key = resp.get("LastEvaluatedKey")
+        if not last_key or len(items) >= MAX_ITEMS:
+            break
+    return items[:MAX_ITEMS]
+
+
+def _delete_share(share_id: str) -> None:
+    """Delete a share from DynamoDB by id."""
+    import boto3
+    table = os.environ.get("GROUPS_TABLE", "")
+    if not table:
+        raise ValueError("GROUPS_TABLE not configured")
+    client = boto3.client("dynamodb", region_name="ap-northeast-1")
+    client.delete_item(
+        TableName=table,
+        Key={"PK": {"S": f"SHARE#{share_id}"}, "SK": {"S": "RESULT"}},
+    )
+    logger.info(f"Admin deleted share: {_sanitize_log(share_id)}")
+
+
+
+CURRENCY_DECIMALS = {
+    "TWD": 0, "JPY": 0, "KRW": 0, "VND": 0, "IDR": 0,
+    "USD": 2, "EUR": 2, "GBP": 2, "AUD": 2, "CAD": 2,
+    "SGD": 2, "HKD": 2, "CNY": 2, "THB": 2, "MYR": 2, "PHP": 2, "INR": 2,
+}
+
+
+def _format_amount(currency: str, amount: float) -> str:
+    """Format amount with currency-aware decimal places."""
+    decimals = CURRENCY_DECIMALS.get(currency, 2)
+    return f"{amount:,.{decimals}f}"
+
+
+# ---------- Cloudflare Access JWT verification ----------
+
+
+
+def _b64url_decode(data: str) -> bytes:
+    """Base64-url decode with padding."""
+    padding = 4 - len(data) % 4
+    if padding != 4:
+        data += "=" * padding
+    return base64.urlsafe_b64decode(data)
+
+
+def _fetch_jwks(team_domain: str) -> dict:
+    """Fetch and cache JWKS from Cloudflare Access. 1h cache."""
+    global _jwks_cache
+    now = time.time()
+    if team_domain in _jwks_cache and _jwks_cache[team_domain]["expires"] > now:
+        return _jwks_cache[team_domain]["jwks"]
+    url = f"https://{team_domain}/cdn-cgi/access/certs"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            jwks = json.loads(resp.read())
+        _jwks_cache[team_domain] = {"jwks": jwks, "expires": now + 3600}
+        return jwks
+    except Exception as e:
+        logger.error(f"Failed to fetch JWKS: {e}")
+        return {"keys": []}
+
+
+def _verify_access_jwt(token: str):
+    """Verify CF Access JWT (RS256). Returns claims dict or None."""
+    team_domain = os.environ.get("CF_ACCESS_TEAM_DOMAIN", "").strip()
+    expected_aud = os.environ.get("CF_ACCESS_AUD", "").strip()
+    if not team_domain or not expected_aud:
+        return None
+    parts = token.split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        header = json.loads(_b64url_decode(parts[0]))
+        payload = json.loads(_b64url_decode(parts[1]))
+        signature = _b64url_decode(parts[2])
+    except Exception:
+        return None
+    kid = header.get("kid")
+    if not kid:
+        return None
+    jwks = _fetch_jwks(team_domain)
+    key_data = next((k for k in jwks.get("keys", []) if k.get("kid") == kid), None)
+    if not key_data:
+        return None
+    try:
+        from Crypto.PublicKey import RSA
+        from Crypto.Signature import pkcs1_15
+        from Crypto.Hash import SHA256
+        n = int.from_bytes(_b64url_decode(key_data["n"]), "big")
+        e = int.from_bytes(_b64url_decode(key_data["e"]), "big")
+        rsa_key = RSA.construct((n, e))
+        signing_input = f"{parts[0]}.{parts[1]}".encode()
+        h = SHA256.new(signing_input)
+        pkcs1_15.new(rsa_key).verify(h, signature)
+    except Exception as e:
+        logger.error(f"JWT verify failed: {e}")
+        return None
+    expected_iss = f"https://{team_domain}"
+    if payload.get("iss") != expected_iss:
+        return None
+    aud = payload.get("aud")
+    if isinstance(aud, list):
+        if expected_aud not in aud:
+            return None
+    elif aud != expected_aud:
+        return None
+    if payload.get("exp", 0) < time.time():
+        return None
+    return payload
+
+
+def _admin_unauthorized(status: int, reason: str):
+    return {
+        "statusCode": status,
+        "headers": SECURE_JSON_HEADERS,
+        "body": json.dumps({"error": reason}),
+    }
+
+
+def _check_admin_auth(event: dict):
+    """
+    Verify admin authentication. Returns (claims_dict, None) on success
+    or (None, error_response) on failure.
+    """
+    if not os.environ.get("CF_ACCESS_TEAM_DOMAIN", "").strip():
+        return None, _admin_unauthorized(503, "admin not configured")
+    headers = event.get("headers") or {}
+    jwt = (
+        headers.get("cf-access-jwt-assertion")
+        or headers.get("Cf-Access-Jwt-Assertion")
+        or headers.get("CF-Access-Jwt-Assertion")
+    )
+    if not jwt:
+        return None, _admin_unauthorized(401, "missing access token")
+    claims = _verify_access_jwt(jwt)
+    if not claims:
+        return None, _admin_unauthorized(401, "invalid access token")
+    allowed_email = os.environ.get("CF_ALLOWED_EMAIL", "").strip().lower()
+    user_email = (claims.get("email") or "").strip().lower()
+    if allowed_email and user_email != allowed_email:
+        logger.warning(f"Admin access denied for email: {_sanitize_log(user_email)}")
+        return None, _admin_unauthorized(403, "forbidden")
+    return claims, None
+
+
+
+def _handle_admin(event: dict, claims: dict) -> dict:
+    """Route /admin/* requests."""
+    path = event.get("rawPath", "")
+    method = event.get("requestContext", {}).get("http", {}).get("method", "GET")
+
+    if path == "/admin" or path == "/admin/":
+        return _admin_render_dashboard()
+
+    if path == "/admin/api/stats" and method == "GET":
+        return _admin_stats()
+
+    if path == "/admin/api/cloudflare/analytics" and method == "GET":
+        return _admin_cf_analytics()
+
+    if path == "/admin/api/shares" and method == "GET":
+        return _admin_list_shares()
+
+    if path.startswith("/admin/api/shares/"):
+        share_id = path.split("/admin/api/shares/", 1)[1]
+        if not _SHARE_ID_RE.match(share_id):
+            return {
+                "statusCode": 400,
+                "headers": SECURE_JSON_HEADERS,
+                "body": json.dumps({"error": "invalid share id"}),
+            }
+        if method == "GET":
+            return _admin_get_share(share_id)
+        if method == "DELETE":
+            # CSRF: verify Origin header
+            headers = event.get("headers") or {}
+            origin = headers.get("origin") or headers.get("Origin") or ""
+            if origin not in ("https://split-admin.redarch.dev", "https://split.redarch.dev"):
+                return {
+                    "statusCode": 403,
+                    "headers": SECURE_JSON_HEADERS,
+                    "body": json.dumps({"error": "cross-origin request blocked"}),
+                }
+            return _admin_delete_share(share_id)
+
+    return {
+        "statusCode": 404,
+        "headers": SECURE_JSON_HEADERS,
+        "body": json.dumps({"error": "not found"}),
+    }
+
+
+
+_ADMIN_SPA_HTML = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Split Senpai Admin</title>
+<style>
+  :root {
+    --bg: #2d4a4a;
+    --layer1: #1e3636;
+    --layer2: #162a2a;
+    --accent: #e8a84c;
+    --text: #e0d5c4;
+    --muted: #a0c4b8;
+    --border: #3a5e5e;
+    --error: #e06050;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+  h1 { color: var(--accent); font-size: 24px; margin: 0 0 24px; }
+  h2 { color: var(--accent); font-size: 16px; margin: 24px 0 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .card {
+    background: var(--layer1);
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid var(--border);
+  }
+  .card .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .card .value { color: var(--accent); font-size: 24px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; background: var(--layer1); border-radius: 12px; overflow: hidden; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--layer2); color: var(--muted); font-size: 11px; text-transform: uppercase; }
+  td { font-size: 13px; }
+  td.amount { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+  button { background: var(--accent); color: var(--layer1); border: none; padding: 6px 12px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 12px; }
+  button:hover { opacity: 0.85; }
+  button.danger { background: var(--error); color: white; }
+  button.outline { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  .chart-container { background: var(--layer1); border-radius: 12px; padding: 16px; }
+  .empty { color: var(--muted); text-align: center; padding: 32px; font-style: italic; }
+  .loading { color: var(--muted); padding: 16px; text-align: center; }
+  .error { color: var(--error); padding: 16px; }
+  code { background: var(--layer2); padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div id="app" class="container">
+  <h1>分帳仙貝 Admin</h1>
+  <div id="content"></div>
+</div>
+<script type="module">
+import { h, render } from 'https://esm.sh/preact@10.19.0';
+import { useState, useEffect } from 'https://esm.sh/preact@10.19.0/hooks';
+import htm from 'https://esm.sh/htm@3.1.1';
+const html = htm.bind(h);
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, opts);
+  if (!r.ok) throw new Error(path + ' returned ' + r.status);
+  return r.json();
+}
+
+function StatCard({ label, value }) {
+  return html`<div class="card"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+}
+
+function LineChart({ data }) {
+  if (!data || data.length === 0) return html`<div class="empty">No data</div>`;
+  const w = 600, hgt = 180, pad = 30;
+  const max = Math.max(...data.map(d => d.count), 1);
+  const points = data.map((d, i) => {
+    const x = pad + (i / Math.max(data.length - 1, 1)) * (w - 2 * pad);
+    const y = hgt - pad - (d.count / max) * (hgt - 2 * pad);
+    return `${x},${y}`;
+  }).join(' ');
+  return html`
+    <svg viewBox="0 0 ${w} ${hgt}" style="width:100%;height:auto">
+      <polyline fill="none" stroke="#e8a84c" stroke-width="2" points=${points} />
+      ${data.map((d, i) => {
+        const x = pad + (i / Math.max(data.length - 1, 1)) * (w - 2 * pad);
+        const y = hgt - pad - (d.count / max) * (hgt - 2 * pad);
+        return html`<circle cx=${x} cy=${y} r="3" fill="#e8a84c" />`;
+      })}
+      <text x=${pad} y=${hgt - 8} fill="#a0c4b8" font-size="10">${data[0].date}</text>
+      <text x=${w - pad} y=${hgt - 8} fill="#a0c4b8" font-size="10" text-anchor="end">${data[data.length - 1].date}</text>
+      <text x="8" y="20" fill="#a0c4b8" font-size="10">${max}</text>
+    </svg>
+  `;
+}
+
+function PieChart({ data }) {
+  const entries = Object.entries(data || {});
+  if (entries.length === 0) return html`<div class="empty">No data</div>`;
+  const total = entries.reduce((s, [, v]) => s + v, 0);
+  const colors = ['#e8a84c', '#7aa0d0', '#3a5a9a', '#b0c8e8', '#e06050'];
+  let angle = -Math.PI / 2;
+  const cx = 100, cy = 100, r = 80;
+  const slices = entries.map(([key, val], i) => {
+    const sliceAngle = (val / total) * 2 * Math.PI;
+    const x1 = cx + r * Math.cos(angle);
+    const y1 = cy + r * Math.sin(angle);
+    angle += sliceAngle;
+    const x2 = cx + r * Math.cos(angle);
+    const y2 = cy + r * Math.sin(angle);
+    const large = sliceAngle > Math.PI ? 1 : 0;
+    const path = `M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z`;
+    return { path, color: colors[i % colors.length], key, val };
+  });
+  return html`
+    <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap">
+      <svg viewBox="0 0 200 200" style="width:200px;height:200px">
+        ${slices.map(s => html`<path d=${s.path} fill=${s.color} />`)}
+      </svg>
+      <div>
+        ${slices.map(s => html`
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <div style="width:12px;height:12px;background:${s.color};border-radius:2px"></div>
+            <span style="color:#e0d5c4">${s.key}: ${s.val}</span>
+          </div>
+        `)}
+      </div>
+    </div>
+  `;
+}
+
+function ShareList({ items, onDelete }) {
+  if (!items || items.length === 0) return html`<div class="empty">No shares</div>`;
+  return html`
+    <table>
+      <thead>
+        <tr><th>ID</th><th>Date</th><th>Currency</th><th>Total</th><th>People</th><th></th></tr>
+      </thead>
+      <tbody>
+        ${items.map(item => html`
+          <tr>
+            <td><code>${item.share_id}</code></td>
+            <td>${(item.created_at || '').slice(0, 16).replace('T', ' ')}</td>
+            <td>${item.currency}</td>
+            <td class="amount">${item.total.toLocaleString()}</td>
+            <td>${item.participants_preview}</td>
+            <td>
+              <button class="outline" onClick=${() => window.open('https://split.redarch.dev/s/' + item.share_id, '_blank')}>View</button>
+              ${' '}
+              <button class="danger" onClick=${() => {
+                if (confirm('Delete share ' + item.share_id + '?')) onDelete(item.share_id);
+              }}>Delete</button>
+            </td>
+          </tr>
+        `)}
+      </tbody>
+    </table>
+  `;
+}
+
+function App() {
+  const [stats, setStats] = useState(null);
+  const [shares, setShares] = useState(null);
+  const [cf, setCf] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function loadAll() {
+    try {
+      const [s, sh, c] = await Promise.all([
+        api('/api/stats'),
+        api('/api/shares'),
+        api('/api/cloudflare/analytics').catch(() => ({ requests_24h: 0, blocked_24h: 0 })),
+      ]);
+      setStats(s);
+      setShares(sh.items);
+      setCf(c);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function deleteShare(id) {
+    try {
+      await fetch('/api/shares/' + id, { method: 'DELETE' });
+      loadAll();
+    } catch (e) {
+      alert('Delete failed: ' + e.message);
+    }
+  }
+
+  useEffect(() => { loadAll(); }, []);
+
+  if (error) return html`<div class="error">Error: ${error}</div>`;
+  if (!stats || !shares) return html`<div class="loading">Loading...</div>`;
+
+  return html`
+    <div>
+      <h2>📊 Stats</h2>
+      <div class="grid">
+        <${StatCard} label="Total Shares" value=${stats.total_shares} />
+        <${StatCard} label="CF Requests 24h" value=${cf?.requests_24h ?? '-'} />
+        <${StatCard} label="CF Blocked 24h" value=${cf?.blocked_24h ?? '-'} />
+        <${StatCard} label="Currencies" value=${Object.keys(stats.currency_breakdown).length} />
+      </div>
+
+      <h2>📈 Shares per Day</h2>
+      <div class="chart-container">
+        <${LineChart} data=${stats.shares_by_day} />
+      </div>
+
+      <h2>🥧 Currency Breakdown</h2>
+      <div class="chart-container">
+        <${PieChart} data=${stats.currency_breakdown} />
+      </div>
+
+      <h2>📋 Shares</h2>
+      <${ShareList} items=${shares} onDelete=${deleteShare} />
+    </div>
+  `;
+}
+
+render(h(App), document.getElementById('content'));
+</script>
+</body>
+</html>
+"""
+
+
+
+
+def _admin_render_dashboard() -> dict:
+    return {
+        "statusCode": 200,
+        "headers": SECURE_HTML_HEADERS,
+        "body": _ADMIN_SPA_HTML,
+    }
+
+
+def _admin_list_shares() -> dict:
+    items = _scan_all_shares()
+    out = []
+    for item in items:
+        try:
+            pk = item.get("PK", {}).get("S", "")
+            share_id = pk.replace("SHARE#", "")
+            request_body = json.loads(item.get("request_body", {}).get("S", "{}"))
+            result = json.loads(item.get("result", {}).get("S", "{}"))
+            participants = request_body.get("participants", [])
+            preview = ", ".join(participants[:3])
+            if len(participants) > 3:
+                preview += f" +{len(participants) - 3}"
+            out.append({
+                "share_id": share_id,
+                "created_at": item.get("created_at", {}).get("S", ""),
+                "currency": result.get("currency", "?"),
+                "total": result.get("total_expenses", 0),
+                "participants_count": len(participants),
+                "participants_preview": preview,
+            })
+        except Exception:
+            continue
+    out.sort(key=lambda x: x["created_at"], reverse=True)
+    return {
+        "statusCode": 200,
+        "headers": SECURE_JSON_HEADERS,
+        "body": json.dumps({"items": out}),
+    }
+
+
+def _admin_get_share(share_id: str) -> dict:
+    data = _get_share(share_id)
+    if not data:
+        return {
+            "statusCode": 404,
+            "headers": SECURE_JSON_HEADERS,
+            "body": json.dumps({"error": "not found"}),
+        }
+    return {
+        "statusCode": 200,
+        "headers": SECURE_JSON_HEADERS,
+        "body": json.dumps(data),
+    }
+
+
+def _admin_delete_share(share_id: str) -> dict:
+    try:
+        _delete_share(share_id)
+        return {
+            "statusCode": 200,
+            "headers": SECURE_JSON_HEADERS,
+            "body": json.dumps({"deleted": True}),
+        }
+    except Exception as e:
+        logger.error(f"Failed to delete share {share_id}: {e}")
+        return {
+            "statusCode": 500,
+            "headers": SECURE_JSON_HEADERS,
+            "body": json.dumps({"error": "delete failed"}),
+        }
+
+
+def _get_cf_api_token() -> str:
+    """Read Cloudflare API token from Secrets Manager."""
+    arn = os.environ.get("CF_API_TOKEN_ARN", "").strip()
+    if not arn:
+        return ""
+    if arn in _secret_cache:
+        return _secret_cache[arn]
+    import boto3
+    client = boto3.client("secretsmanager", region_name="ap-northeast-1")
+    try:
+        resp = client.get_secret_value(SecretId=arn)
+        token = resp["SecretString"].strip()
+        _secret_cache[arn] = token
+        return token
+    except Exception as e:
+        logger.error(f"Failed to fetch CF token: {e}")
+        return ""
+
+
+def _cf_graphql_query(url: str, token: str, query: str, variables: dict = None) -> dict:
+    """Execute a GraphQL query against the Cloudflare Analytics API."""
+    payload = {"query": query}
+    if variables:
+        payload["variables"] = variables
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode(),
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read())
+
+
+def _admin_cf_analytics() -> dict:
+    arn = os.environ.get("CF_API_TOKEN_ARN", "").strip()
+    zone_id = os.environ.get("CF_ZONE_ID", "").strip()
+    if not arn or not zone_id:
+        return {
+            "statusCode": 503,
+            "headers": SECURE_JSON_HEADERS,
+            "body": json.dumps({"error": "cloudflare analytics not configured"}),
+        }
+    token = _get_cf_api_token()
+    if not token:
+        return {
+            "statusCode": 503,
+            "headers": SECURE_JSON_HEADERS,
+            "body": json.dumps({"error": "cloudflare token unavailable"}),
+        }
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    query = """
+query($zoneTag: String!, $date: String!) {
+  viewer {
+    zones(filter: { zoneTag: $zoneTag }) {
+      httpRequests1dGroups(
+        limit: 1,
+        filter: { date: $date },
+        orderBy: [date_DESC]
+      ) {
+        sum { requests threats }
+        dimensions { date }
+      }
+    }
+  }
+}
+"""
+    variables = {"zoneTag": zone_id, "date": today}
+    try:
+        resp = _cf_graphql_query("https://api.cloudflare.com/client/v4/graphql", token, query, variables)
+        zones = resp.get("data", {}).get("viewer", {}).get("zones", [])
+        if not zones or not zones[0].get("httpRequests1dGroups"):
+            return {
+                "statusCode": 200,
+                "headers": SECURE_JSON_HEADERS,
+                "body": json.dumps({"requests_24h": 0, "blocked_24h": 0}),
+            }
+        group = zones[0]["httpRequests1dGroups"][0]
+        return {
+            "statusCode": 200,
+            "headers": SECURE_JSON_HEADERS,
+            "body": json.dumps({
+                "requests_24h": group["sum"]["requests"],
+                "blocked_24h": group["sum"]["threats"],
+            }),
+        }
+    except Exception as e:
+        logger.error(f"CF analytics query failed: {e}")
+        return {
+            "statusCode": 500,
+            "headers": SECURE_JSON_HEADERS,
+            "body": json.dumps({"error": "analytics fetch failed"}),
+        }
+
+
+def _admin_stats() -> dict:
+    """Aggregate share stats from DynamoDB."""
+    items = _scan_all_shares()
+    total = len(items)
+    currency_count = {}
+    currency_total = {}
+    day_count = {}
+    for item in items:
+        try:
+            result = json.loads(item.get("result", {}).get("S", "{}"))
+            currency = result.get("currency", "?")
+            amount = float(result.get("total_expenses", 0))
+            currency_count[currency] = currency_count.get(currency, 0) + 1
+            currency_total[currency] = currency_total.get(currency, 0) + amount
+            created = item.get("created_at", {}).get("S", "")
+            day = created[:10] if created else "?"
+            day_count[day] = day_count.get(day, 0) + 1
+        except Exception:
+            continue
+    avg_by_currency = {
+        c: round(currency_total[c] / currency_count[c], 2)
+        for c in currency_count
+    }
+    shares_by_day = sorted(
+        [{"date": d, "count": c} for d, c in day_count.items()],
+        key=lambda x: x["date"],
+    )
+    return {
+        "statusCode": 200,
+        "headers": SECURE_JSON_HEADERS,
+        "body": json.dumps({
+            "total_shares": total,
+            "currency_breakdown": currency_count,
+            "avg_amount_by_currency": avg_by_currency,
+            "shares_by_day": shares_by_day,
+        }),
+    }

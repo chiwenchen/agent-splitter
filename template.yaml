@@ -14,6 +14,20 @@ Resources:
       DefaultRouteSettings:
         ThrottlingRateLimit: 10
         ThrottlingBurstLimit: 20
+      CorsConfiguration:
+        AllowOrigins:
+          - "https://split.redarch.dev"
+          - "https://split-admin.redarch.dev"
+        AllowMethods:
+          - GET
+          - POST
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - X-Api-Key
+          - Cf-Access-Jwt-Assertion
+        MaxAge: 300
 
   ApiKeySecret:
     Type: AWS::SecretsManager::Secret
@@ -77,7 +91,12 @@ Resources:
           ALCHEMY_SECRET_ARN: !Ref AlchemySecret
           PAYMENTS_TABLE: !Ref UsedPaymentsTable
           GROUPS_TABLE: !Ref GroupsTable
-          ALLOWED_HOSTS: split.redarch.dev
+          ALLOWED_HOSTS: "split.redarch.dev,split-admin.redarch.dev"
+          CF_ACCESS_TEAM_DOMAIN: ""
+          CF_ACCESS_AUD: ""
+          CF_ALLOWED_EMAIL: "cwchen2000@gmail.com"
+          CF_API_TOKEN_ARN: "arn:aws:secretsmanager:ap-northeast-1:274571492950:secret:split-settle/cloudflare-api-token"
+          CF_ZONE_ID: "2fdc064b300cf497b17c10d7e0bd9ab1"
       Policies:
         - AWSLambdaBasicExecutionRole
         - Statement:
@@ -88,6 +107,9 @@ Resources:
               Action: secretsmanager:GetSecretValue
               Resource: !Ref AlchemySecret
             - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:split-settle/cloudflare-api-token-*"
+            - Effect: Allow
               Action:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
@@ -97,6 +119,8 @@ Resources:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
                 - dynamodb:Query
+                - dynamodb:Scan
+                - dynamodb:DeleteItem
               Resource: !GetAtt GroupsTable.Arn
       Events:
         SplitSettle:
@@ -164,6 +188,18 @@ Resources:
           Properties:
             Path: /.well-known/assetlinks.json
             Method: get
+            ApiId: !Ref SplitSettleApi
+        AdminRoot:
+          Type: HttpApi
+          Properties:
+            Path: /admin
+            Method: get
+            ApiId: !Ref SplitSettleApi
+        AdminApi:
+          Type: HttpApi
+          Properties:
+            Path: /admin/{proxy+}
+            Method: any
             ApiId: !Ref SplitSettleApi
 
 Outputs:

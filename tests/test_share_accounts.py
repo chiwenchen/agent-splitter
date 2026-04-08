@@ -94,3 +94,19 @@ def test_get_accounts_empty(ddb):
     )
     assert resp["statusCode"] == 200
     assert json.loads(resp["body"]) == {}
+
+
+def test_put_then_get_account(ddb):
+    _seed_share()
+    put = _invoke(
+        "PUT",
+        "/v1/share/abc12345/accounts/Alice",
+        body={"account_text": "國泰 700-12345678"},
+        headers={"x-device-id": "dev-1"},
+    )
+    assert put["statusCode"] == 200
+    assert json.loads(put["body"]) == {"ok": True}
+
+    get = _invoke("GET", "/v1/share/abc12345/accounts")
+    assert get["statusCode"] == 200
+    assert json.loads(get["body"]) == {"Alice": "國泰 700-12345678"}

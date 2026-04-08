@@ -280,6 +280,27 @@ def _get_accounts(share_id: str) -> dict:
     return out
 
 
+def _save_account(share_id: str, participant: str, account_text: str,
+                  device_id: str, ttl_expiry: int) -> None:
+    """Upsert an ACCOUNT# row. Caller must have validated inputs."""
+    import boto3
+    table = os.environ.get("GROUPS_TABLE", "")
+    if not table:
+        raise ValueError("GROUPS_TABLE not configured")
+    client = boto3.client("dynamodb", region_name="ap-northeast-1")
+    client.put_item(
+        TableName=table,
+        Item={
+            "PK": {"S": f"SHARE#{share_id}"},
+            "SK": {"S": f"ACCOUNT#{participant}"},
+            "account_text": {"S": account_text},
+            "updated_at": {"S": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
+            "updated_by": {"S": device_id or ""},
+            "ttl_expiry": {"N": str(ttl_expiry)},
+        },
+    )
+
+
 def _bad_request(msg: str) -> dict:
     return {
         "statusCode": 400,
@@ -318,6 +339,28 @@ def _handle_share_accounts(event):
             "statusCode": 200,
             "headers": {"Content-Type": "application/json"},
             "body": json.dumps(_get_accounts(share_id)),
+        }
+
+    if method == "PUT" and participant is not None:
+        try:
+            body = json.loads(event.get("body") or "{}")
+        except json.JSONDecodeError:
+            return _bad_request("invalid json")
+        account_text = body.get("account_text", "")
+        if not isinstance(account_text, str):
+            return _bad_request("account_text must be a string")
+        if len(account_text) > ACCOUNT_TEXT_MAX:
+            return _bad_request(f"account_text exceeds {ACCOUNT_TEXT_MAX} chars")
+        participants = share["request_body"].get("participants", [])
+        if participant not in participants:
+            return _bad_request("participant not in this share")
+        device_id = (event.get("headers") or {}).get("x-device-id", "")
+        _save_account(share_id, participant, account_text, device_id,
+                      share["ttl_expiry"])
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"ok": True}),
         }
 
     return {

@@ -1250,8 +1250,12 @@ def lambda_handler(event, context):
     # correct Host header; direct curl to *.amazonaws.com does not.
     allowed = _allowed_hosts()
     if allowed:
-        host_hdr = ((event.get("headers") or {}).get("host") or "").lower()
-        host_only = host_hdr.split(":", 1)[0]
+        hdrs = event.get("headers") or {}
+        # Prefer X-Forwarded-Host when present (set by Cloudflare / most CDNs
+        # to the original client-facing hostname) and fall back to Host.
+        xfh = (hdrs.get("x-forwarded-host") or "").lower()
+        host_hdr = (hdrs.get("host") or "").lower()
+        host_only = (xfh or host_hdr).split(":", 1)[0]
         if host_only and host_only not in allowed:
             return {
                 "statusCode": 403,

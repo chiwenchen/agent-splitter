@@ -1192,7 +1192,6 @@ def test_share_page_i18n_zh(share_env):
     response = lambda_handler(event, {})
     assert response["statusCode"] == 200
     assert "分帳仙貝" in response["body"]
-    assert "我是..." in response["body"]
     assert "也要分帳？" in response["body"]
 
 
@@ -1210,8 +1209,8 @@ def test_share_page_i18n_ja(share_env):
     assert "割り勘先輩" in response["body"]
 
 
-def test_share_page_has_me_picker(share_env):
-    """Share page should have 'I am' filter buttons for each participant."""
+def test_share_page_has_identity_card_with_participants(share_env):
+    """Share page should bootstrap participants for the identity card."""
     _fake_share_save("me-test", {"currency": "USD"}, {
         "currency": "USD", "total_expenses": 300,
         "settlements": [{"from": "Carol", "to": "Alice", "amount": 100}],
@@ -1221,11 +1220,11 @@ def test_share_page_has_me_picker(share_env):
     event = {"rawPath": "/s/me-test", "requestContext": {"http": {"method": "GET"}}, "headers": {}}
     response = lambda_handler(event, {})
     body = response["body"]
-    assert "me-picker" in body
+    assert "identity-card" in body
     assert "Alice" in body
     assert "Bob" in body
     assert "Carol" in body
-    assert "filterMe" in body  # JS function exists
+    assert "renderIdentityCard" in body  # JS function exists
 
 
 def test_share_page_has_split_senpai_title(share_env):
@@ -1284,7 +1283,7 @@ def test_render_share_page_no_xss_via_participant_name():
         "settlements": [{"from": malicious, "to": "Alice", "amount": 100}],
         "summary": [{"participant": malicious}, {"participant": "Alice"}],
     }
-    si = {"title": "T", "iam": "x", "all": "All", "cta_q": "?", "cta": "Go"}
+    si = {"title": "T", "cta_q": "?", "cta": "Go"}
     html = handler._render_share_page(result, "", si)
     # No inline onclick=filterMe(...) on rendered buttons — event delegation only
     assert "onclick=\"filterMe" not in html
@@ -1401,7 +1400,7 @@ def test_full_flow_create_settle_share_view(groups_env, share_env, monkeypatch):
     assert "分帳仙貝" in body  # Chinese title
     assert "Alice" in body
     assert "TWD" in body
-    assert "me-picker" in body  # I am filter
+    assert "identity-card" in body  # new identity card layout
 
 
 # ---------------------------------------------------------------------------
@@ -1546,3 +1545,55 @@ def test_aasa_method_not_allowed():
         "headers": {},
     }, {})
     assert resp["statusCode"] == 405
+
+
+def test_share_page_has_identity_card():
+    """New layout uses identity-card; me-picker is removed."""
+    import handler
+    result = {
+        "currency": "NT",
+        "total_expenses": 4500,
+        "settlements": [
+            {"from": "Bob", "to": "Alice", "amount": 1200},
+            {"from": "Charlie", "to": "Alice", "amount": 600},
+        ],
+        "summary": [
+            {"participant": "Alice"},
+            {"participant": "Bob"},
+            {"participant": "Charlie"},
+        ],
+    }
+    html = handler._render_share_page(result, "2026-04-08T00:00:00Z",
+                                       si=None, share_id="abc12345")
+    assert "identity-card" in html
+    assert "me-picker" not in html
+    assert "me-btn" not in html
+    assert "{{iam}}" not in html
+    assert "{{me_buttons}}" not in html
+    assert "{{all_label}}" not in html
+
+
+def test_share_page_bootstrap_includes_settlements():
+    """Client JS needs settlements + participants to compute owed/owes."""
+    import handler
+    import json
+    result = {
+        "currency": "NT",
+        "total_expenses": 1000,
+        "settlements": [{"from": "Bob", "to": "Alice", "amount": 1000}],
+        "summary": [{"participant": "Alice"}, {"participant": "Bob"}],
+    }
+    html = handler._render_share_page(result, "2026-04-08T00:00:00Z",
+                                       si=None, share_id="xyz99999")
+    marker = "window.__SHARE = "
+    start = html.index(marker) + len(marker)
+    end = html.index(";</script>", start)
+    payload = html[start:end]
+    payload_clean = (payload.replace("\\u003c", "<")
+                            .replace("\\u0026", "&")
+                            .replace("\\u0027", "'"))
+    data = json.loads(payload_clean)
+    assert data["share_id"] == "xyz99999"
+    assert data["participants"] == ["Alice", "Bob"]
+    assert len(data["settlements"]) == 1
+    assert data["settlements"][0]["from"] == "Bob"

@@ -24,46 +24,98 @@ SPLIT_SETTLE_API_KEY=<key> python3 mcp_server/server.py --transport http --port 
 ## Architecture
 
 ```
-mcp_server/server.py        # MCP server: stdio (local) or HTTP/SSE (remote)
-      │  HTTP POST
-      ▼
-API Gateway (HTTP API)       # AWS ap-northeast-1
+Client (browser / curl / MCP agent)
       │
       ▼
-Lambda: src/split_settle/handler.py   # Pure Python, no dependencies
-  - API Key validation (x-api-key header, disabled when API_KEY env var is empty)
-  - GET /openapi.json  — OpenAPI 3.1 schema
-  - POST /v1/split_settle — settlement calculation
+Cloudflare custom domain         split.redarch.dev   |   split-admin.redarch.dev
+      │                                                            │
+      ▼                                                            ▼
+Cloudflare Worker                split-senpai-proxy        split-admin-proxy
+  (sets x-forwarded-host)          │                              │
+                                   └──────────┬───────────────────┘
+                                              ▼
+API Gateway (HTTP API, ap-northeast-1)
+  - Default execute-api endpoint reachable but Lambda rejects
+    any request whose host is not in ALLOWED_HOSTS
+      │
+      ▼
+Lambda: src/split_settle/handler.py
+  - Host allow-list gate (ALLOWED_HOSTS, reads X-Forwarded-Host first)
+  - Fail-closed API-key check (x-api-key vs Secrets Manager)
+  - Routes: GET  /                              -> web UI
+            GET  /health                        -> health check
+            GET  /openapi.json                  -> OpenAPI 3.1 schema
+            GET  /docs                          -> Swagger UI
+            POST /v1/split_settle               -> settlement calc (+ group_id calldata)
+            POST /v1/share                      -> create share link (public, size-capped)
+            GET  /s/{id}                        -> shared result HTML
+            GET  /v1/share/{id}                 -> shared result JSON
+            POST /v1/groups                     -> create wallet group (API key)
+            GET  /admin, /admin/{proxy+}        -> admin SPA + JSON APIs
+                                                   (CF Access JWT + email allow-list)
+            GET  /.well-known/apple-app-site-association, /assetlinks.json
+
+MCP server: mcp_server/server.py           (stdio for Claude Desktop, or HTTP/SSE for remote agents)
+      │ HTTP POST with x-api-key
+      ▼
+      points at https://split.redarch.dev/v1/split_settle (not execute-api directly)
 ```
 
 **Lambda** (`src/split_settle/handler.py`) contains all business logic:
-- API Key validation via `x-api-key` header (skipped when `API_KEY` env var is empty)
-- Input validation
+- Host allow-list: `ALLOWED_HOSTS` env var (comma-separated). Lambda prefers
+  `X-Forwarded-Host` over `Host` so the Cloudflare Worker chain can forward the
+  original client hostname. Requests whose effective host is not in the list
+  return 403 — this is how we block direct hits on the raw
+  `*.execute-api.amazonaws.com` endpoint (HTTP API has no
+  `disableExecuteApiEndpoint` flag).
+- API key validation via `x-api-key` header. **Fail-closed**: if the secret
+  resolves to an empty string and we are running inside a Lambda runtime
+  (`AWS_LAMBDA_FUNCTION_NAME` is set), `_get_secret` raises rather than
+  silently allowing unauthenticated access. Local tests bypass this because
+  they don't set that env var.
 - Integer arithmetic (amounts × 100) to avoid floating point errors
 - Greedy algorithm for minimum-transfer settlement
-- OpenAPI 3.1 schema served at `GET /openapi.json`
+- Admin dashboard gated behind Cloudflare Access JWT — see "Admin Dashboard" below
 
 **MCP server** (`mcp_server/server.py`) supports two transports:
 - `stdio` (default) — for local Claude Code / Claude Desktop
 - `http` — SSE-based remote server, for other agents to connect via URL
 
+The MCP server talks to `https://split.redarch.dev/v1/split_settle`, not the
+raw execute-api URL — that's important because the raw URL is blocked by the
+host allow-list.
+
 ## API Key Setup
 
-API key is managed by **AWS Secrets Manager** (`split-settle/api-key`).
-- Auto-generated on first deploy (32-char random string)
-- Lambda reads it at runtime via boto3 (cached in global scope)
-- Not visible in Lambda config or CloudFormation outputs
+API key lives in **AWS Secrets Manager** as `split-settle/api-key-v2` and is
+read at runtime via boto3 (cached in module scope).
 
-Retrieve the key after deploy:
+**Why it's not auto-generated:** `GenerateSecretString` requires the
+`secretsmanager:GetRandomPassword` IAM action, which cannot be scoped to a
+resource ARN. We intentionally don't grant it to `ClaudeCLI` to keep the blast
+radius small. So the template creates an empty secret and you populate it
+once after the first deploy:
+
+```bash
+# First deploy only (or key rotation): generate + store a random key
+aws secretsmanager put-secret-value \
+  --secret-id split-settle/api-key-v2 \
+  --secret-string "$(python3 -c 'import secrets; print(secrets.token_urlsafe(36))')" \
+  --region ap-northeast-1
+```
+
+Retrieve the current value:
 ```bash
 aws secretsmanager get-secret-value \
-  --secret-id split-settle/api-key \
+  --secret-id split-settle/api-key-v2 \
   --query SecretString --output text \
   --region ap-northeast-1
 ```
 
-For MCP server: set `SPLIT_SETTLE_API_KEY=<value>` env var.
-For local dev/tests: set `API_KEY=<any-value>` env var (bypasses Secrets Manager).
+For MCP server / external agents: set `SPLIT_SETTLE_API_KEY=<value>` env var.
+For local dev / pytest: set `API_KEY=<any-value>` env var — this takes
+precedence over Secrets Manager. The fail-closed check only fires inside a
+real Lambda runtime, so `pytest` works without AWS creds.
 
 ## AWS Resources
 
@@ -79,7 +131,104 @@ For local dev/tests: set `API_KEY=<any-value>` env var (bypasses Secrets Manager
 
 > IAM → Users → ClaudeCLI → Add permissions → Create inline policy → JSON tab
 
-Covers: CloudFormation, Lambda, API Gateway, Secrets Manager, IAM (Lambda execution roles), CloudWatch Logs, S3 (SAM bucket). All scoped to `agent-splitter-*` resources.
+Covers: CloudFormation (including `ContinueUpdateRollback`), Lambda,
+API Gateway, Secrets Manager (scoped `split-settle/*` plus the unscopable
+`GetRandomPassword` is **deliberately excluded**), IAM (Lambda execution
+roles), CloudWatch Logs, DynamoDB (including `UpdateTable` /
+`DescribeContinuousBackups` / `UpdateContinuousBackups` — CloudFormation
+refreshes the table on every stack update), and S3 (SAM bucket). All
+resource-scoped to `agent-splitter-*` / `split-settle/*` where possible.
+
+Notable omissions by design:
+- `secretsmanager:GetRandomPassword` — cannot be scoped to a resource; we
+  populate the API key manually via `put-secret-value` instead.
+- `iam:PutUserPolicy` / `iam:GetUserPolicy` — ClaudeCLI cannot modify its
+  own policy. Any policy update must be done by you in the AWS Console.
+- `lambda:ListFunctions` / `logs:DescribeLogStreams` — log reading is not
+  granted. Debug via temporary code paths that return errors in the response
+  body, not by grepping CloudWatch.
+
+## Cloudflare Setup
+
+Two Cloudflare Workers sit in front of the Lambda. Both repos live outside
+this one:
+
+- `~/Documents/repos/split-senpai-proxy` — proxies `split.redarch.dev/*` to
+  the execute-api origin
+- `~/Documents/repos/split-admin-proxy` — proxies `split-admin.redarch.dev/*`
+  to `split.redarch.dev/admin/*` (chains through the first Worker)
+
+**Both Workers must set `x-forwarded-host` to the incoming client hostname
+before calling `fetch()`.** Without it, the Lambda host allow-list sees only
+the execute-api hostname and rejects everything. `split-senpai-proxy` only
+sets `x-forwarded-host` when it is missing, so the admin hostname set by
+`split-admin-proxy` survives the two-hop proxy chain.
+
+Deploy either Worker:
+```bash
+cd ~/Documents/repos/split-senpai-proxy   # or split-admin-proxy
+wrangler deploy
+```
+
+wrangler is authenticated via OAuth (`wrangler login`). **Do not** set
+`CLOUDFLARE_API_TOKEN` — it overrides OAuth and the token in Secrets Manager
+only has `Zone Analytics: Read` scope, which cannot deploy Workers.
+
+## Admin Dashboard
+
+- Public URL: `https://split-admin.redarch.dev`
+- Front door: Cloudflare Access application `split-senpai-admin`, policy
+  `Allow owner` (include email `cwchen2000@gmail.com`, one-time PIN identity
+  provider). Unauthenticated requests get 302'd to the Access login page.
+- Back door: Lambda re-verifies the Cloudflare Access JWT via
+  `_verify_access_jwt` (RS256, signatures checked with pycryptodome, JWKS
+  cached for 1 hour). This is defence in depth — even if Cloudflare Access
+  is misconfigured, the Lambda still requires a valid signed JWT.
+
+**Required Lambda env vars (all set via template.yaml, do NOT edit in the
+Lambda console):**
+
+```
+CF_ACCESS_TEAM_DOMAIN = redarch.cloudflareaccess.com
+CF_ACCESS_AUD         = 92097101075a4b784478b1f54092148c842ccdd2f42724cb838a1bac7dc11d66
+CF_ALLOWED_EMAIL      = cwchen2000@gmail.com
+CF_API_TOKEN_ARN      = arn:aws:secretsmanager:ap-northeast-1:274571492950:secret:split-settle/cloudflare-api-token
+CF_ZONE_ID            = 2fdc064b300cf497b17c10d7e0bd9ab1
+```
+
+Editing these in the Lambda console creates drift that gets wiped by the
+next `sam deploy`. If you need to rotate any of them, edit `template.yaml`
+and re-deploy.
+
+Admin routes (all require a valid Access JWT):
+```
+GET    /admin                         -> inline Preact SPA
+GET    /admin/api/stats               -> aggregate stats (currency / day)
+GET    /admin/api/shares              -> list all shares
+GET    /admin/api/shares/{id}         -> single share detail
+DELETE /admin/api/shares/{id}         -> delete share (Origin header checked)
+GET    /admin/api/cloudflare/analytics-> 24h Cloudflare Analytics summary
+```
+
+## Deploy Recovery
+
+If `sam deploy` fails mid-flight and the stack ends up in
+`UPDATE_ROLLBACK_FAILED`, CloudFormation usually cannot auto-recover because
+the same permission that blocked the update also blocks the rollback. Skip
+the problem resource and continue:
+
+```bash
+aws cloudformation continue-update-rollback \
+  --stack-name agent-splitter \
+  --region ap-northeast-1 \
+  --resources-to-skip GroupsTable
+```
+
+`GroupsTable` is the usual culprit — CloudFormation re-issues `UpdateTable`
+on every stack change for drift detection, and any missing DynamoDB
+permission surfaces here. After `--resources-to-skip`, fix the IAM gap in
+`iam/claudecli-policy.json`, paste it in the console, then re-run
+`sam deploy`.
 
 ## Claude Desktop Setup (local stdio)
 

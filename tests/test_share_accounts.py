@@ -157,3 +157,23 @@ def test_put_expired_share(ddb, monkeypatch):
         headers={"x-device-id": "d"},
     )
     assert resp["statusCode"] == 404
+
+
+def test_delete_account(ddb):
+    _seed_share()
+    _invoke(
+        "PUT",
+        "/v1/share/abc12345/accounts/Alice",
+        body={"account_text": "x"},
+        headers={"x-device-id": "d"},
+    )
+    resp = _invoke(
+        "DELETE",
+        "/v1/share/abc12345/accounts/Alice",
+        headers={"x-device-id": "d"},
+    )
+    assert resp["statusCode"] == 200
+    get = _invoke("GET", "/v1/share/abc12345/accounts")
+    assert json.loads(get["body"]) == {}
+
+

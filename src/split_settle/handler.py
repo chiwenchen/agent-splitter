@@ -301,6 +301,22 @@ def _save_account(share_id: str, participant: str, account_text: str,
     )
 
 
+def _delete_account(share_id: str, participant: str) -> None:
+    """Delete an ACCOUNT# row. No-op if GROUPS_TABLE unset (local/tests)."""
+    import boto3
+    table = os.environ.get("GROUPS_TABLE", "")
+    if not table:
+        return
+    client = boto3.client("dynamodb", region_name="ap-northeast-1")
+    client.delete_item(
+        TableName=table,
+        Key={
+            "PK": {"S": f"SHARE#{share_id}"},
+            "SK": {"S": f"ACCOUNT#{participant}"},
+        },
+    )
+
+
 def _bad_request(msg: str) -> dict:
     return {
         "statusCode": 400,
@@ -357,6 +373,17 @@ def _handle_share_accounts(event):
         device_id = (event.get("headers") or {}).get("x-device-id", "")
         _save_account(share_id, participant, account_text, device_id,
                       share["ttl_expiry"])
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"ok": True}),
+        }
+
+    if method == "DELETE" and participant is not None:
+        participants = share["request_body"].get("participants", [])
+        if participant not in participants:
+            return _bad_request("participant not in this share")
+        _delete_account(share_id, participant)
         return {
             "statusCode": 200,
             "headers": {"Content-Type": "application/json"},

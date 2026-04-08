@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import time
+import urllib.parse
 import urllib.request
 
 logger = logging.getLogger(__name__)
@@ -252,6 +253,148 @@ def _get_share(share_id: str) -> dict:
         "result": json.loads(item["result"]["S"]),
         "created_at": item["created_at"]["S"],
         "ttl_expiry": int(item["ttl_expiry"]["N"]),
+    }
+
+
+ACCOUNT_TEXT_MAX = 500
+
+
+def _get_accounts(share_id: str) -> dict:
+    """Return {participant_name: account_text} for a share. Empty dict if none."""
+    import boto3
+    table = os.environ.get("GROUPS_TABLE", "")
+    if not table:
+        return {}
+    client = boto3.client("dynamodb", region_name="ap-northeast-1")
+    response = client.query(
+        TableName=table,
+        KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
+        ExpressionAttributeValues={
+            ":pk": {"S": f"SHARE#{share_id}"},
+            ":sk": {"S": "ACCOUNT#"},
+        },
+    )
+    out = {}
+    for item in response.get("Items", []):
+        name = item["SK"]["S"].replace("ACCOUNT#", "", 1)
+        out[name] = item.get("account_text", {}).get("S", "")
+    return out
+
+
+def _save_account(share_id: str, participant: str, account_text: str,
+                  device_id: str, ttl_expiry: int) -> None:
+    """Upsert an ACCOUNT# row. Caller must have validated inputs."""
+    import boto3
+    table = os.environ.get("GROUPS_TABLE", "")
+    if not table:
+        raise ValueError("GROUPS_TABLE not configured")
+    client = boto3.client("dynamodb", region_name="ap-northeast-1")
+    client.put_item(
+        TableName=table,
+        Item={
+            "PK": {"S": f"SHARE#{share_id}"},
+            "SK": {"S": f"ACCOUNT#{participant}"},
+            "account_text": {"S": account_text},
+            "updated_at": {"S": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
+            "updated_by": {"S": device_id or ""},
+            "ttl_expiry": {"N": str(ttl_expiry)},
+        },
+    )
+
+
+def _delete_account(share_id: str, participant: str) -> None:
+    """Delete an ACCOUNT# row. No-op if GROUPS_TABLE unset (local/tests)."""
+    import boto3
+    table = os.environ.get("GROUPS_TABLE", "")
+    if not table:
+        return
+    client = boto3.client("dynamodb", region_name="ap-northeast-1")
+    client.delete_item(
+        TableName=table,
+        Key={
+            "PK": {"S": f"SHARE#{share_id}"},
+            "SK": {"S": f"ACCOUNT#{participant}"},
+        },
+    )
+
+
+def _bad_request(msg: str) -> dict:
+    return {
+        "statusCode": 400,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({"error": msg}),
+    }
+
+
+def _handle_share_accounts(event):
+    """Handle /v1/share/{id}/accounts[/{participant}] — public, no API key."""
+    path = event.get("rawPath", "")
+    method = (event.get("requestContext", {})
+              .get("http", {}).get("method", "GET")).upper()
+
+    rest = path.split("/v1/share/", 1)[-1]
+    parts = rest.split("/")
+    if len(parts) < 2 or parts[1] != "accounts":
+        return {
+            "statusCode": 404,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "not found"}),
+        }
+    share_id = parts[0]
+    participant = urllib.parse.unquote(parts[2]) if len(parts) >= 3 and parts[2] else None
+
+    share = _get_share(share_id)
+    if not share or share["ttl_expiry"] < time.time():
+        return {
+            "statusCode": 404,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "share not found"}),
+        }
+
+    if method == "GET" and participant is None:
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps(_get_accounts(share_id)),
+        }
+
+    if method == "PUT" and participant is not None:
+        try:
+            body = json.loads(event.get("body") or "{}")
+        except json.JSONDecodeError:
+            return _bad_request("invalid json")
+        account_text = body.get("account_text", "")
+        if not isinstance(account_text, str):
+            return _bad_request("account_text must be a string")
+        if len(account_text) > ACCOUNT_TEXT_MAX:
+            return _bad_request(f"account_text exceeds {ACCOUNT_TEXT_MAX} chars")
+        participants = share["request_body"].get("participants", [])
+        if participant not in participants:
+            return _bad_request("participant not in this share")
+        device_id = (event.get("headers") or {}).get("x-device-id", "")
+        _save_account(share_id, participant, account_text, device_id,
+                      share["ttl_expiry"])
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"ok": True}),
+        }
+
+    if method == "DELETE" and participant is not None:
+        participants = share["request_body"].get("participants", [])
+        if participant not in participants:
+            return _bad_request("participant not in this share")
+        _delete_account(share_id, participant)
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"ok": True}),
+        }
+
+    return {
+        "statusCode": 405,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({"error": "method not allowed"}),
     }
 
 
@@ -1075,9 +1218,41 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
     .settlement { transition:all 0.35s cubic-bezier(0.4,0,0.2,1);
                   max-height:80px;overflow:hidden;margin-bottom:8px;opacity:1;transform:translateX(0); }
     .settlement.hidden { max-height:0;opacity:0;transform:translateX(-40px);margin-bottom:0;padding-top:0;padding-bottom:0; }
+    /* Share-accounts UI */
+    .modal-backdrop { position:fixed;inset:0;background:rgba(0,0,0,0.6);
+      display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px; }
+    .modal { background:#2d4a4a;border:2px solid #e8a84c;border-radius:16px;padding:24px;
+      max-width:340px;width:100%;display:flex;flex-direction:column;gap:10px;color:#e0d5c4;
+      box-shadow:8px 8px 16px rgba(10,30,30,0.6); }
+    .modal h3 { color:#e8a84c;margin:0 0 4px;font-size:18px; }
+    .modal p { color:#8aaa9e;font-size:13px;margin:0 0 8px; }
+    .modal button { padding:10px 14px;border:none;border-radius:10px;font-size:14px;
+      font-weight:600;cursor:pointer;background:#1e3636;color:#e0d5c4;
+      box-shadow:3px 3px 6px rgba(10,30,30,0.4); }
+    .modal button:hover { background:#e8a84c;color:#1e3636; }
+    .modal button.guest { background:transparent;border:1px solid #5a7a70;color:#8aaa9e; }
+    .my-account-panel { background:#1e3636;padding:14px;border-radius:12px;margin-bottom:14px;
+      display:flex;flex-direction:column;gap:8px;
+      box-shadow:inset -3px 3px 6px rgba(10,30,30,0.5),inset 3px -3px 6px rgba(60,100,100,0.15); }
+    .my-account-panel h3 { color:#e8a84c;font-size:13px;margin:0; }
+    .my-account-panel .hint { font-size:11px;color:#5a7a70;margin:0; }
+    .my-account-panel textarea { width:100%;padding:8px;border-radius:8px;border:none;
+      background:#2d4a4a;color:#e0d5c4;font-family:inherit;font-size:13px;resize:vertical;box-sizing:border-box; }
+    .my-account-panel button { padding:8px 16px;border:none;border-radius:8px;
+      background:linear-gradient(135deg,#e8a84c,#c88830);color:#1e3636;font-weight:700;
+      cursor:pointer;align-self:flex-start;font-size:13px;
+      box-shadow:3px 3px 6px rgba(10,30,30,0.4); }
+    .payee-account { width:100%;margin-top:6px;font-size:12px;display:flex;gap:6px;
+      align-items:center;flex-wrap:wrap;color:#1e3636; }
+    .payee-account code { background:rgba(30,54,54,0.2);padding:3px 8px;border-radius:6px;
+      word-break:break-all;font-family:'Menlo',monospace;color:#1e3636; }
+    .payee-account .copy-btn { padding:3px 10px;font-size:11px;border:1px solid #1e3636;
+      background:transparent;border-radius:6px;cursor:pointer;color:#1e3636;font-weight:600; }
+    .payee-account .muted { color:rgba(30,54,54,0.6);font-style:italic; }
   </style>
 </head>
 <body>
+  <div id="identity-modal" hidden></div>
   <div class="phone">
     <h1>{{share_title}}</h1>
     <div class="date">{{date}}</div>
@@ -1088,6 +1263,7 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
       <button class="me-btn active" data-all="1">{{all_label}}</button>
       {{me_buttons}}
     </div>
+    <div id="my-account-panel" class="my-account-panel" hidden></div>
     <hr class="divider">
     {{settlements_html}}
     <div class="summary">{{num_settlements}} transfer{{s_plural}} to settle <span class="check">✓</span></div>
@@ -1097,6 +1273,150 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
     </div>
     <div class="footer"><a href="/docs">API Docs</a> · Powered by x402</div>
   </div>
+  <script>window.__SHARE = {{bootstrap_json}};</script>
+  <script>
+  (function() {
+    var SHARE = window.__SHARE || {};
+    var shareId = SHARE.share_id;
+    var participants = SHARE.participants || [];
+    var settlements = SHARE.settlements || [];
+    if (!shareId) return;
+
+    var deviceId = localStorage.getItem('split_device_id');
+    if (!deviceId) {
+      deviceId = (crypto.randomUUID && crypto.randomUUID()) ||
+                 (Date.now().toString(36) + Math.random().toString(36).slice(2));
+      localStorage.setItem('split_device_id', deviceId);
+    }
+
+    var IDENTITY_KEY = 'split_identity:' + shareId;
+    var identity = localStorage.getItem(IDENTITY_KEY);
+    var accounts = {};
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, function(c) {
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#x27;'}[c];
+      });
+    }
+
+    function fetchAccounts() {
+      return fetch('/v1/share/' + encodeURIComponent(shareId) + '/accounts')
+        .then(function(r) { return r.ok ? r.json() : {}; })
+        .then(function(d) { accounts = d || {}; })
+        .catch(function() { accounts = {}; });
+    }
+
+    function showIdentityModal() {
+      var modal = document.getElementById('identity-modal');
+      if (!modal) return;
+      var html = '<div class="modal-backdrop"><div class="modal">' +
+                 '<h3>你是哪一位？</h3>' +
+                 '<p>選擇身分後，需要付錢給你的人才會看到你的帳號。</p>';
+      participants.forEach(function(p) {
+        html += '<button data-name="' + esc(p) + '">' + esc(p) + '</button>';
+      });
+      html += '<button class="guest" data-name="__guest__">我只是路人</button>';
+      html += '</div></div>';
+      modal.innerHTML = html;
+      modal.hidden = false;
+      modal.querySelectorAll('button[data-name]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          identity = btn.getAttribute('data-name');
+          localStorage.setItem(IDENTITY_KEY, identity);
+          modal.hidden = true;
+          modal.innerHTML = '';
+          renderMyAccountPanel();
+          renderPayeeAccounts();
+        });
+      });
+    }
+
+    function renderMyAccountPanel() {
+      var panel = document.getElementById('my-account-panel');
+      if (!panel) return;
+      if (!identity || identity === '__guest__') {
+        panel.hidden = true;
+        panel.innerHTML = '';
+        return;
+      }
+      var current = accounts[identity] || '';
+      panel.hidden = false;
+      panel.innerHTML =
+        '<h3>我的收款帳號（' + esc(identity) + '）</h3>' +
+        '<p class="hint">貼上你的銀行帳號 / Line Pay / 任何收款方式，需要付錢給你的人會看到。</p>' +
+        '<textarea maxlength="500" rows="3" id="my-account-text"></textarea>' +
+        '<button id="my-account-save">儲存</button>' +
+        '<span id="my-account-status" class="hint"></span>';
+      var ta = panel.querySelector('#my-account-text');
+      ta.value = current;
+      panel.querySelector('#my-account-save').addEventListener('click', function() {
+        var text = ta.value;
+        var status = panel.querySelector('#my-account-status');
+        status.textContent = '儲存中…';
+        fetch('/v1/share/' + encodeURIComponent(shareId) + '/accounts/' +
+              encodeURIComponent(identity), {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json', 'x-device-id': deviceId},
+          body: JSON.stringify({account_text: text}),
+        }).then(function(r) {
+          if (r.ok) {
+            accounts[identity] = text;
+            status.textContent = '已儲存 ✓';
+            renderPayeeAccounts();
+          } else {
+            status.textContent = '儲存失敗';
+          }
+        }).catch(function() { status.textContent = '儲存失敗'; });
+      });
+    }
+
+    function renderPayeeAccounts() {
+      var rows = document.querySelectorAll('.settlement');
+      rows.forEach(function(row, i) {
+        var prior = row.querySelector('.payee-account');
+        if (prior) prior.remove();
+        if (!identity || identity === '__guest__') return;
+        var s = settlements[i];
+        if (!s || s.from !== identity) return;
+        var payeeName = s.to;
+        var acct = accounts[payeeName];
+        var div = document.createElement('div');
+        div.className = 'payee-account';
+        if (acct) {
+          var code = document.createElement('code');
+          code.textContent = acct;
+          var btn = document.createElement('button');
+          btn.className = 'copy-btn';
+          btn.textContent = '複製';
+          btn.addEventListener('click', function() {
+            if (navigator.clipboard) navigator.clipboard.writeText(acct);
+            btn.textContent = '已複製';
+            setTimeout(function() { btn.textContent = '複製'; }, 1500);
+          });
+          div.appendChild(code);
+          div.appendChild(btn);
+        } else {
+          var span = document.createElement('span');
+          span.className = 'muted';
+          span.textContent = payeeName + ' 還沒提供帳號';
+          div.appendChild(span);
+        }
+        // settlement is flex with justify-between; force payee block to wrap to its own line
+        div.style.flexBasis = '100%';
+        row.appendChild(div);
+      });
+    }
+
+    fetchAccounts().then(function() {
+      if (!identity) {
+        showIdentityModal();
+      } else {
+        renderMyAccountPanel();
+        renderPayeeAccounts();
+      }
+    });
+  })();
+  </script>
   <script>
   // Event delegation — no user data ever touches inline JS. Names live in
   // data-name attributes which are HTML-escaped at render time.
@@ -1126,7 +1446,8 @@ def _esc(s: str) -> str:
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#x27;")
 
 
-def _render_share_page(result: dict, created_at: str = "", si: dict = None) -> str:
+def _render_share_page(result: dict, created_at: str = "", si: dict = None,
+                       share_id: str = "") -> str:
     """Render the share page HTML from a split result."""
     currency = _esc(result.get("currency", ""))
     total = result.get("total_expenses", 0)
@@ -1134,6 +1455,28 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None) -> s
     summary = result.get("summary", [])
     names = [_esc(s["participant"]) for s in summary]
     n_sett = len(settlements)
+
+    # Bootstrap payload for client JS. json.dumps escapes </script> via the
+    # ensure_ascii path; we additionally escape '<' to be defensive against
+    # HTML parsing ending the <script> block early.
+    bootstrap = {
+        "share_id": share_id,
+        "participants": [s["participant"] for s in summary],
+        "settlements": [
+            {"from": s["from"], "to": s["to"], "amount": s["amount"]}
+            for s in settlements
+        ],
+    }
+    # Defensive escapes for embedding inside <script>: prevent </script> close
+    # (\u003c), unicode line terminators that break JS string literals, and
+    # single-quote/ampersand sequences that might be flagged by XSS heuristics
+    # even though they're safe inside a JSON string literal.
+    bootstrap_json = (json.dumps(bootstrap)
+                      .replace("<", "\\u003c")
+                      .replace("&", "\\u0026")
+                      .replace("'", "\\u0027")
+                      .replace("\u2028", "\\u2028")
+                      .replace("\u2029", "\\u2029"))
 
     settlements_html = ""
     for i, s in enumerate(settlements):
@@ -1171,6 +1514,7 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None) -> s
         "{{all_label}}": si.get("all", "All") if si else "All",
         "{{cta_q}}": si.get("cta_q", "Need to split a bill?") if si else "Need to split a bill?",
         "{{cta_btn}}": si.get("cta", "Start splitting →") if si else "Start splitting →",
+        "{{bootstrap_json}}": bootstrap_json,
     }
     html = SHARE_PAGE_TEMPLATE
     for key, value in replacements.items():
@@ -1334,6 +1678,12 @@ def lambda_handler(event, context):
                 "body": json.dumps({"error": "internal server error"}),
             }
 
+    _share_parts = path.split("/")
+    # ['', 'v1', 'share', '<id>', 'accounts', ...]
+    if (len(_share_parts) >= 5 and _share_parts[1] == "v1"
+            and _share_parts[2] == "share" and _share_parts[4] == "accounts"):
+        return _handle_share_accounts(event)
+
     if path.startswith("/v1/share/"):
         return _handle_share_json(event)
 
@@ -1485,7 +1835,8 @@ def _handle_share_page(event):
     lang = qs.get("lang", "en")
     si = _SHARE_I18N.get(lang, _SHARE_I18N["en"])
 
-    html_out = _render_share_page(data["result"], data["created_at"], si)
+    html_out = _render_share_page(data["result"], data["created_at"], si,
+                                  share_id=share_id)
     return _html_response(200, html_out)
 
 

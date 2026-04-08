@@ -255,6 +255,78 @@ def _get_share(share_id: str) -> dict:
     }
 
 
+ACCOUNT_TEXT_MAX = 500
+
+
+def _get_accounts(share_id: str) -> dict:
+    """Return {participant_name: account_text} for a share. Empty dict if none."""
+    import boto3
+    table = os.environ.get("GROUPS_TABLE", "")
+    if not table:
+        return {}
+    client = boto3.client("dynamodb", region_name="ap-northeast-1")
+    response = client.query(
+        TableName=table,
+        KeyConditionExpression="PK = :pk AND begins_with(SK, :sk)",
+        ExpressionAttributeValues={
+            ":pk": {"S": f"SHARE#{share_id}"},
+            ":sk": {"S": "ACCOUNT#"},
+        },
+    )
+    out = {}
+    for item in response.get("Items", []):
+        name = item["SK"]["S"].replace("ACCOUNT#", "", 1)
+        out[name] = item.get("account_text", {}).get("S", "")
+    return out
+
+
+def _bad_request(msg: str) -> dict:
+    return {
+        "statusCode": 400,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({"error": msg}),
+    }
+
+
+def _handle_share_accounts(event):
+    """Handle /v1/share/{id}/accounts[/{participant}] — public, no API key."""
+    path = event.get("rawPath", "")
+    method = (event.get("requestContext", {})
+              .get("http", {}).get("method", "GET")).upper()
+
+    rest = path.split("/v1/share/", 1)[-1]
+    parts = rest.split("/")
+    if len(parts) < 2 or parts[1] != "accounts":
+        return {
+            "statusCode": 404,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "not found"}),
+        }
+    share_id = parts[0]
+    participant = parts[2] if len(parts) >= 3 and parts[2] else None
+
+    share = _get_share(share_id)
+    if not share or share["ttl_expiry"] < time.time():
+        return {
+            "statusCode": 404,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps({"error": "share not found"}),
+        }
+
+    if method == "GET" and participant is None:
+        return {
+            "statusCode": 200,
+            "headers": {"Content-Type": "application/json"},
+            "body": json.dumps(_get_accounts(share_id)),
+        }
+
+    return {
+        "statusCode": 405,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({"error": "method not allowed"}),
+    }
+
+
 def _verify_payment(tx_hash: str, network: str) -> tuple:
     """Verify an on-chain USDC payment. Returns (is_valid, error_message)."""
     tx_hash = tx_hash.lower()
@@ -1333,6 +1405,9 @@ def lambda_handler(event, context):
                 "headers": SECURE_JSON_HEADERS,
                 "body": json.dumps({"error": "internal server error"}),
             }
+
+    if path.startswith("/v1/share/") and "/accounts" in path:
+        return _handle_share_accounts(event)
 
     if path.startswith("/v1/share/"):
         return _handle_share_json(event)

@@ -1178,47 +1178,86 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
     * { margin:0;padding:0;box-sizing:border-box; }
     body { font-family:'Inter',-apple-system,system-ui,sans-serif; background:#d5d0c8;
            min-height:100vh; display:flex; justify-content:center; padding:16px; }
-    .phone { width:100%;max-width:420px;background:#2d4a4a;border-radius:28px;padding:28px;
+    .phone { width:100%;max-width:420px;background:#2d4a4a;border-radius:28px;padding:24px;
              color:#e0d5c4;box-shadow:12px 12px 12px rgba(30,50,50,0.4);margin:0 auto;height:fit-content; }
     @media(max-width:460px){body{padding:0}.phone{border-radius:0;min-height:100vh}}
-    h1 { font-size:24px;font-weight:800;color:#e8a84c;margin-bottom:2px; }
-    .date { font-size:12px;color:#5a7a70;margin-bottom:20px; }
-    .info { font-size:14px;color:#8aaa9e;margin-bottom:4px; }
-    .divider { border:none;height:2px;margin:20px 0;
+    h1 { font-size:22px;font-weight:800;color:#e8a84c;margin-bottom:2px; }
+    .date { font-size:11px;color:#5a7a70;margin-bottom:14px; }
+    .total-line { font-size:12px;color:#8aaa9e;margin-bottom:14px; }
+    .divider { border:none;height:2px;margin:16px 0;
                background:linear-gradient(90deg,transparent,#e8a84c,#8aaa9e,#e8a84c,transparent); }
+
+    /* Identity card */
+    .identity-card { background:linear-gradient(135deg,#1e3636,#234040);border-radius:14px;padding:14px 16px;
+                     margin-bottom:10px;
+                     box-shadow:inset -2px 2px 5px rgba(10,30,30,0.5),inset 2px -2px 5px rgba(60,100,100,0.15); }
+    .id-row { display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap; }
+    .id-name { font-size:16px;font-weight:700;color:#e8a84c;min-width:0;flex:1;
+               overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+    .id-edit { background:transparent;border:1px solid #e8a84c;color:#e8a84c;
+               padding:4px 10px;border-radius:8px;font-size:11px;cursor:pointer;font-weight:600;
+               flex-shrink:0;white-space:nowrap;font-family:inherit; }
+    .id-summary { font-size:12px;line-height:1.6; }
+    .id-summary .owed { color:#7fc69a;font-weight:700; }
+    .id-summary .owes { color:#d96848;font-weight:700; }
+    .id-summary > div { display:block; }
+
+    /* Account editor (expandable inside identity card) */
+    .acct-editor { margin-top:10px;padding-top:10px;border-top:1px solid rgba(90,122,112,0.3);display:none;
+                   flex-direction:column;gap:6px; }
+    .acct-editor.open { display:flex; }
+    .acct-editor textarea { width:100%;padding:8px;border-radius:8px;border:none;
+                            background:#2d4a4a;color:#e0d5c4;font-family:inherit;font-size:13px;
+                            resize:vertical;box-sizing:border-box;min-height:60px; }
+    .acct-editor button { padding:6px 14px;border:none;border-radius:8px;
+                          background:linear-gradient(135deg,#e8a84c,#c88830);color:#1e3636;
+                          font-weight:700;font-size:12px;cursor:pointer;align-self:flex-start;
+                          font-family:inherit; }
+    .acct-editor .status { font-size:11px;color:#5a7a70; }
+
+    /* View toggle */
+    .view-toggle { display:flex;justify-content:flex-end;margin:4px 0 8px; }
+    .view-toggle button { background:transparent;border:none;color:#8aaa9e;
+                          font-size:11px;cursor:pointer;text-decoration:underline;font-family:inherit; }
+
+    /* Settlement rows */
     @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
     .settlement { background:linear-gradient(135deg,#e8a84c,#c88830);color:#1e3636;
-                  border-radius:12px;padding:12px 16px;margin-bottom:8px;font-size:15px;
-                  display:flex;justify-content:space-between;align-items:center;
+                  border-radius:12px;padding:10px 14px;margin-bottom:8px;
                   box-shadow:4px 4px 8px rgba(10,30,30,0.4),-2px -2px 4px rgba(60,100,100,0.1);
-                  animation:slideIn 0.3s ease-out both;animation-delay:calc(var(--i,0)*0.1s); }
+                  animation:slideIn 0.3s ease-out both;animation-delay:calc(var(--i,0)*0.1s);
+                  transition:all 0.35s cubic-bezier(0.4,0,0.2,1);
+                  max-height:200px;overflow:hidden;opacity:1;transform:translateX(0); }
+    .settlement.hidden { max-height:0;opacity:0;transform:translateX(-40px);margin-bottom:0;
+                         padding-top:0;padding-bottom:0; }
+    .sett-main { display:flex;justify-content:space-between;align-items:center;font-size:14px; }
     .from { font-weight:700;color:#5a2020; }
     .to { font-weight:700;color:#1a4a3a; }
-    .amount { font-weight:800;font-size:16px; }
-    .summary { text-align:center;background:#1e3636;padding:10px 16px;border-radius:12px;
-               font-size:12px;color:#8aaa9e;margin-top:10px;
+    .amount { font-weight:800;font-size:15px; }
+    .payee-account { margin-top:6px;padding-top:6px;border-top:1px dashed rgba(30,54,54,0.3);
+                     font-size:11px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:#1e3636; }
+    .payee-account code { background:rgba(30,54,54,0.15);padding:2px 6px;border-radius:5px;
+                          font-family:'Menlo',monospace;color:#1e3636;word-break:break-all; }
+    .payee-account .copy-btn { padding:2px 8px;font-size:10px;border:1px solid #1e3636;
+                               background:transparent;border-radius:5px;cursor:pointer;color:#1e3636;font-weight:600; }
+    .payee-account .muted { color:rgba(30,54,54,0.55);font-style:italic; }
+
+    .summary { text-align:center;background:#1e3636;padding:8px 14px;border-radius:10px;
+               font-size:11px;color:#8aaa9e;margin-top:10px;
                box-shadow:inset -3px 3px 6px rgba(10,30,30,0.5),inset 3px -3px 6px rgba(60,100,100,0.15); }
     .check { color:#e8a84c; }
-    .cta { text-align:center;margin-top:30px;padding-top:20px;
+    .cta { text-align:center;margin-top:24px;padding-top:16px;
            border-top:2px solid transparent;
            background-image:linear-gradient(#2d4a4a,#2d4a4a),linear-gradient(90deg,transparent,#e8a84c,#8aaa9e,#e8a84c,transparent);
            background-origin:padding-box,border-box;background-clip:padding-box,border-box; }
-    .cta p { color:#5a7a70;font-size:13px;margin-bottom:12px; }
+    .cta p { color:#5a7a70;font-size:12px;margin-bottom:10px; }
     .cta a { display:inline-block;background:linear-gradient(135deg,#e8a84c,#c88830);color:#1e3636;
-             text-decoration:none;padding:12px 24px;border-radius:12px;font-weight:700;
+             text-decoration:none;padding:10px 20px;border-radius:10px;font-weight:700;font-size:13px;
              box-shadow:4px 4px 8px rgba(10,30,30,0.4),-2px -2px 4px rgba(60,100,100,0.1); }
-    .footer { text-align:center;margin-top:20px;font-size:10px;color:#5a7a70; }
+    .footer { text-align:center;margin-top:16px;font-size:10px;color:#5a7a70; }
     .footer a { color:#8aaa9e; }
-    /* Select yourself */
-    .me-picker { display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px; }
-    .me-btn { background:#1e3636;border:none;color:#8aaa9e;border-radius:16px;padding:6px 14px;
-              font-size:12px;font-weight:600;cursor:pointer;
-              box-shadow:4px 4px 8px rgba(10,30,30,0.4),-2px -2px 4px rgba(60,100,100,0.1); }
-    .me-btn.active { background:#e8a84c;color:#1e3636; }
-    .settlement { transition:all 0.35s cubic-bezier(0.4,0,0.2,1);
-                  max-height:80px;overflow:hidden;margin-bottom:8px;opacity:1;transform:translateX(0); }
-    .settlement.hidden { max-height:0;opacity:0;transform:translateX(-40px);margin-bottom:0;padding-top:0;padding-bottom:0; }
-    /* Share-accounts UI */
+
+    /* Identity modal */
     .modal-backdrop { position:fixed;inset:0;background:rgba(0,0,0,0.6);
       display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px; }
     .modal { background:#2d4a4a;border:2px solid #e8a84c;border-radius:16px;padding:24px;
@@ -1228,27 +1267,9 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
     .modal p { color:#8aaa9e;font-size:13px;margin:0 0 8px; }
     .modal button { padding:10px 14px;border:none;border-radius:10px;font-size:14px;
       font-weight:600;cursor:pointer;background:#1e3636;color:#e0d5c4;
-      box-shadow:3px 3px 6px rgba(10,30,30,0.4); }
+      box-shadow:3px 3px 6px rgba(10,30,30,0.4);font-family:inherit; }
     .modal button:hover { background:#e8a84c;color:#1e3636; }
     .modal button.guest { background:transparent;border:1px solid #5a7a70;color:#8aaa9e; }
-    .my-account-panel { background:#1e3636;padding:14px;border-radius:12px;margin-bottom:14px;
-      display:flex;flex-direction:column;gap:8px;
-      box-shadow:inset -3px 3px 6px rgba(10,30,30,0.5),inset 3px -3px 6px rgba(60,100,100,0.15); }
-    .my-account-panel h3 { color:#e8a84c;font-size:13px;margin:0; }
-    .my-account-panel .hint { font-size:11px;color:#5a7a70;margin:0; }
-    .my-account-panel textarea { width:100%;padding:8px;border-radius:8px;border:none;
-      background:#2d4a4a;color:#e0d5c4;font-family:inherit;font-size:13px;resize:vertical;box-sizing:border-box; }
-    .my-account-panel button { padding:8px 16px;border:none;border-radius:8px;
-      background:linear-gradient(135deg,#e8a84c,#c88830);color:#1e3636;font-weight:700;
-      cursor:pointer;align-self:flex-start;font-size:13px;
-      box-shadow:3px 3px 6px rgba(10,30,30,0.4); }
-    .payee-account { width:100%;margin-top:6px;font-size:12px;display:flex;gap:6px;
-      align-items:center;flex-wrap:wrap;color:#1e3636; }
-    .payee-account code { background:rgba(30,54,54,0.2);padding:3px 8px;border-radius:6px;
-      word-break:break-all;font-family:'Menlo',monospace;color:#1e3636; }
-    .payee-account .copy-btn { padding:3px 10px;font-size:11px;border:1px solid #1e3636;
-      background:transparent;border-radius:6px;cursor:pointer;color:#1e3636;font-weight:600; }
-    .payee-account .muted { color:rgba(30,54,54,0.6);font-style:italic; }
   </style>
 </head>
 <body>
@@ -1256,14 +1277,25 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
   <div class="phone">
     <h1>{{share_title}}</h1>
     <div class="date">{{date}}</div>
-    <div class="info">{{participants}}</div>
-    <div class="info" style="margin-bottom:16px">Total: {{currency}} {{total}}</div>
-    <div style="font-size:11px;color:#5a7a70;margin-bottom:8px">{{iam}}</div>
-    <div class="me-picker" id="me-picker">
-      <button class="me-btn active" data-all="1">{{all_label}}</button>
-      {{me_buttons}}
+    <div class="total-line">{{participants}} · Total: {{currency}} {{total}}</div>
+
+    <div class="identity-card" id="identity-card" hidden>
+      <div class="id-row">
+        <span class="id-name" id="id-name"></span>
+        <button class="id-edit" id="id-edit" hidden>{{edit_btn_label}}</button>
+      </div>
+      <div class="id-summary" id="id-summary"></div>
+      <div class="acct-editor" id="acct-editor">
+        <textarea id="acct-text" maxlength="500" rows="3"></textarea>
+        <button id="acct-save">{{save_label}}</button>
+        <span class="status" id="acct-status"></span>
+      </div>
     </div>
-    <div id="my-account-panel" class="my-account-panel" hidden></div>
+
+    <div class="view-toggle" id="view-toggle" hidden>
+      <button id="view-toggle-btn">{{view_all_label}}</button>
+    </div>
+
     <hr class="divider">
     {{settlements_html}}
     <div class="summary">{{num_settlements}} transfer{{s_plural}} to settle <span class="check">✓</span></div>
@@ -1280,6 +1312,7 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
     var shareId = SHARE.share_id;
     var participants = SHARE.participants || [];
     var settlements = SHARE.settlements || [];
+    var LBL = SHARE.labels || {};
     if (!shareId) return;
 
     var deviceId = localStorage.getItem('split_device_id');
@@ -1292,11 +1325,27 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
     var IDENTITY_KEY = 'split_identity:' + shareId;
     var identity = localStorage.getItem(IDENTITY_KEY);
     var accounts = {};
+    var showAll = false;
 
     function esc(s) {
       return String(s).replace(/[&<>"']/g, function(c) {
         return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#x27;'}[c];
       });
+    }
+
+    function fmt(n) { return Number(n).toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:2}); }
+
+    function totalsFor(name) {
+      var owed = 0, owes = 0;
+      settlements.forEach(function(s) {
+        if (s.to === name) owed += Number(s.amount) || 0;
+        if (s.from === name) owes += Number(s.amount) || 0;
+      });
+      return {owed: owed, owes: owes};
+    }
+
+    function isRealIdentity() {
+      return identity && identity !== '__guest__';
     }
 
     function fetchAccounts() {
@@ -1310,12 +1359,12 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
       var modal = document.getElementById('identity-modal');
       if (!modal) return;
       var html = '<div class="modal-backdrop"><div class="modal">' +
-                 '<h3>你是哪一位？</h3>' +
-                 '<p>選擇身分後，需要付錢給你的人才會看到你的帳號。</p>';
+                 '<h3>' + esc(LBL.modal_title || '') + '</h3>' +
+                 '<p>' + esc(LBL.modal_body || '') + '</p>';
       participants.forEach(function(p) {
         html += '<button data-name="' + esc(p) + '">' + esc(p) + '</button>';
       });
-      html += '<button class="guest" data-name="__guest__">我只是路人</button>';
+      html += '<button class="guest" data-name="__guest__">' + esc(LBL.guest_label || '') + '</button>';
       html += '</div></div>';
       modal.innerHTML = html;
       modal.hidden = false;
@@ -1325,61 +1374,64 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
           localStorage.setItem(IDENTITY_KEY, identity);
           modal.hidden = true;
           modal.innerHTML = '';
-          renderMyAccountPanel();
-          renderPayeeAccounts();
+          renderAll();
         });
       });
     }
 
-    function renderMyAccountPanel() {
-      var panel = document.getElementById('my-account-panel');
-      if (!panel) return;
-      if (!identity || identity === '__guest__') {
-        panel.hidden = true;
-        panel.innerHTML = '';
+    function renderIdentityCard() {
+      var card = document.getElementById('identity-card');
+      var nameEl = document.getElementById('id-name');
+      var editBtn = document.getElementById('id-edit');
+      var summary = document.getElementById('id-summary');
+      var editor = document.getElementById('acct-editor');
+      if (!card) return;
+
+      if (!isRealIdentity()) {
+        card.hidden = true;
         return;
       }
-      var current = accounts[identity] || '';
-      panel.hidden = false;
-      panel.innerHTML =
-        '<h3>我的收款帳號（' + esc(identity) + '）</h3>' +
-        '<p class="hint">貼上你的銀行帳號 / Line Pay / 任何收款方式，需要付錢給你的人會看到。</p>' +
-        '<textarea maxlength="500" rows="3" id="my-account-text"></textarea>' +
-        '<button id="my-account-save">儲存</button>' +
-        '<span id="my-account-status" class="hint"></span>';
-      var ta = panel.querySelector('#my-account-text');
-      ta.value = current;
-      panel.querySelector('#my-account-save').addEventListener('click', function() {
-        var text = ta.value;
-        var status = panel.querySelector('#my-account-status');
-        status.textContent = '儲存中…';
-        fetch('/v1/share/' + encodeURIComponent(shareId) + '/accounts/' +
-              encodeURIComponent(identity), {
-          method: 'PUT',
-          headers: {'Content-Type': 'application/json', 'x-device-id': deviceId},
-          body: JSON.stringify({account_text: text}),
-        }).then(function(r) {
-          if (r.ok) {
-            accounts[identity] = text;
-            status.textContent = '已儲存 ✓';
-            renderPayeeAccounts();
-          } else {
-            status.textContent = '儲存失敗';
-          }
-        }).catch(function() { status.textContent = '儲存失敗'; });
-      });
+      card.hidden = false;
+      nameEl.textContent = (LBL.greeting || '') + identity;
+
+      var t = totalsFor(identity);
+      var lines = '';
+      if (t.owed > 0) {
+        lines += '<div><span class="owed">' + esc(LBL.owed_label || '') + ' ' +
+                 esc(SHARE.currency || '') + ' ' + esc(fmt(t.owed)) + '</span></div>';
+      }
+      if (t.owes > 0) {
+        lines += '<div><span class="owes">' + esc(LBL.owes_label || '') + ' ' +
+                 esc(SHARE.currency || '') + ' ' + esc(fmt(t.owes)) + '</span></div>';
+      }
+      summary.innerHTML = lines;
+
+      editBtn.hidden = !(t.owed > 0);
+      if (editBtn.hidden) {
+        editor.classList.remove('open');
+      } else {
+        var ta = document.getElementById('acct-text');
+        ta.value = accounts[identity] || '';
+      }
     }
 
-    function renderPayeeAccounts() {
+    function renderSettlements() {
       var rows = document.querySelectorAll('.settlement');
       rows.forEach(function(row, i) {
+        var s = settlements[i];
+        var visible;
+        if (!isRealIdentity() || showAll) {
+          visible = true;
+        } else {
+          visible = (s && (s.from === identity || s.to === identity));
+        }
+        row.classList.toggle('hidden', !visible);
+
         var prior = row.querySelector('.payee-account');
         if (prior) prior.remove();
-        if (!identity || identity === '__guest__') return;
-        var s = settlements[i];
-        if (!s || s.from !== identity) return;
-        var payeeName = s.to;
-        var acct = accounts[payeeName];
+        if (!isRealIdentity() || !s || s.from !== identity) return;
+
+        var acct = accounts[s.to];
         var div = document.createElement('div');
         div.className = 'payee-account';
         if (acct) {
@@ -1387,55 +1439,75 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
           code.textContent = acct;
           var btn = document.createElement('button');
           btn.className = 'copy-btn';
-          btn.textContent = '複製';
+          btn.textContent = LBL.copy_label || 'Copy';
           btn.addEventListener('click', function() {
             if (navigator.clipboard) navigator.clipboard.writeText(acct);
-            btn.textContent = '已複製';
-            setTimeout(function() { btn.textContent = '複製'; }, 1500);
+            btn.textContent = LBL.copied_label || 'Copied';
+            setTimeout(function() { btn.textContent = LBL.copy_label || 'Copy'; }, 1500);
           });
           div.appendChild(code);
           div.appendChild(btn);
         } else {
           var span = document.createElement('span');
           span.className = 'muted';
-          span.textContent = payeeName + ' 還沒提供帳號';
+          span.textContent = s.to + ' ' + (LBL.no_account_suffix || '');
           div.appendChild(span);
         }
-        // settlement is flex with justify-between; force payee block to wrap to its own line
-        div.style.flexBasis = '100%';
         row.appendChild(div);
       });
+
+      var toggleWrap = document.getElementById('view-toggle');
+      var toggleBtn = document.getElementById('view-toggle-btn');
+      if (isRealIdentity()) {
+        toggleWrap.hidden = false;
+        toggleBtn.textContent = showAll ? (LBL.view_mine_label || '') : (LBL.view_all_label || '');
+      } else {
+        toggleWrap.hidden = true;
+      }
     }
+
+    function renderAll() {
+      renderIdentityCard();
+      renderSettlements();
+    }
+
+    document.getElementById('id-edit').addEventListener('click', function() {
+      document.getElementById('acct-editor').classList.toggle('open');
+    });
+    document.getElementById('acct-save').addEventListener('click', function() {
+      if (!isRealIdentity()) return;
+      var ta = document.getElementById('acct-text');
+      var status = document.getElementById('acct-status');
+      var text = ta.value;
+      status.textContent = LBL.saving_label || '';
+      fetch('/v1/share/' + encodeURIComponent(shareId) + '/accounts/' +
+            encodeURIComponent(identity), {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json', 'x-device-id': deviceId},
+        body: JSON.stringify({account_text: text}),
+      }).then(function(r) {
+        if (r.ok) {
+          accounts[identity] = text;
+          status.textContent = LBL.saved_label || '';
+          renderSettlements();
+        } else {
+          status.textContent = LBL.save_failed_label || '';
+        }
+      }).catch(function() { status.textContent = LBL.save_failed_label || ''; });
+    });
+    document.getElementById('view-toggle-btn').addEventListener('click', function() {
+      showAll = !showAll;
+      renderSettlements();
+    });
 
     fetchAccounts().then(function() {
       if (!identity) {
         showIdentityModal();
       } else {
-        renderMyAccountPanel();
-        renderPayeeAccounts();
+        renderAll();
       }
     });
   })();
-  </script>
-  <script>
-  // Event delegation — no user data ever touches inline JS. Names live in
-  // data-name attributes which are HTML-escaped at render time.
-  function filterMe(name) {
-    document.querySelectorAll('.me-btn').forEach(b => {
-      const isAll = b.hasAttribute('data-all');
-      b.classList.toggle('active', (!name && isAll) || (!!name && b.dataset.name === name));
-    });
-    document.querySelectorAll('.settlement').forEach(s => {
-      if (!name) { s.classList.remove('hidden'); return; }
-      const text = s.textContent;
-      s.classList.toggle('hidden', !text.includes(name));
-    });
-  }
-  document.getElementById('me-picker').addEventListener('click', function(e) {
-    const btn = e.target.closest('.me-btn');
-    if (!btn) return;
-    filterMe(btn.hasAttribute('data-all') ? '' : (btn.dataset.name || ''));
-  });
   </script>
 </body>
 </html>"""
@@ -1456,16 +1528,33 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None,
     names = [_esc(s["participant"]) for s in summary]
     n_sett = len(settlements)
 
-    # Bootstrap payload for client JS. json.dumps escapes </script> via the
-    # ensure_ascii path; we additionally escape '<' to be defensive against
-    # HTML parsing ending the <script> block early.
+    si = si or {}
+    labels = {
+        "greeting": si.get("greeting", "嗨，"),
+        "owed_label": si.get("owed", "別人欠你"),
+        "owes_label": si.get("owes", "你要付"),
+        "view_all_label": si.get("view_all", "顯示全部 ▼"),
+        "view_mine_label": si.get("view_mine", "只看自己 ▲"),
+        "copy_label": si.get("copy", "複製"),
+        "copied_label": si.get("copied", "已複製"),
+        "no_account_suffix": si.get("no_account", "還沒提供帳號"),
+        "saving_label": si.get("saving", "儲存中…"),
+        "saved_label": si.get("saved", "已儲存 ✓"),
+        "save_failed_label": si.get("save_failed", "儲存失敗"),
+        "modal_title": si.get("modal_title", "你是哪一位？"),
+        "modal_body": si.get("modal_body", "選擇身分後，需要付錢給你的人才會看到你的帳號。"),
+        "guest_label": si.get("guest", "我只是路人"),
+    }
+
     bootstrap = {
         "share_id": share_id,
+        "currency": result.get("currency", ""),
         "participants": [s["participant"] for s in summary],
         "settlements": [
             {"from": s["from"], "to": s["to"], "amount": s["amount"]}
             for s in settlements
         ],
+        "labels": labels,
     }
     # Defensive escapes for embedding inside <script>: prevent </script> close
     # (\u003c), unicode line terminators that break JS string literals, and
@@ -1482,19 +1571,13 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None,
     for i, s in enumerate(settlements):
         settlements_html += (
             f'<div class="settlement" style="--i:{i}">'
+            f'<div class="sett-main">'
             f'<span><span class="from">{_esc(s["from"])}</span> → '
             f'<span class="to">{_esc(s["to"])}</span></span>'
             f'<span class="amount">{currency} {s["amount"]:,.2f}</span>'
             f'</div>'
+            f'</div>'
         )
-
-    # SECURITY: data-name carries the (HTML-escaped) name; click handler is
-    # attached via JS event delegation in the template, NOT inline onclick.
-    # Inlining the name into onclick would create a stored-XSS sink because
-    # browsers HTML-decode attribute values before JS parses them.
-    me_buttons = ""
-    for name in names:
-        me_buttons += f'<button class="me-btn" data-name="{name}">{name}</button>'
 
     s_plural = "s" if n_sett != 1 else ""
     replacements = {
@@ -1505,15 +1588,15 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None,
         "{{participants}}": ", ".join(names),
         "{{currency}}": currency,
         "{{total}}": f"{total:,.2f}",
-        "{{me_buttons}}": me_buttons,
         "{{settlements_html}}": settlements_html,
         "{{num_settlements}}": str(n_sett),
         "{{s_plural}}": s_plural,
-        "{{share_title}}": si.get("title", "Split Senpai") if si else "Split Senpai",
-        "{{iam}}": si.get("iam", "I am...") if si else "I am...",
-        "{{all_label}}": si.get("all", "All") if si else "All",
-        "{{cta_q}}": si.get("cta_q", "Need to split a bill?") if si else "Need to split a bill?",
-        "{{cta_btn}}": si.get("cta", "Start splitting →") if si else "Start splitting →",
+        "{{share_title}}": _esc(si.get("title", "Split Senpai")),
+        "{{cta_q}}": _esc(si.get("cta_q", "Need to split a bill?")),
+        "{{cta_btn}}": _esc(si.get("cta", "Start splitting →")),
+        "{{edit_btn_label}}": _esc("分享轉帳帳號 ✏️"),
+        "{{save_label}}": _esc("儲存"),
+        "{{view_all_label}}": _esc(labels["view_all_label"]),
         "{{bootstrap_json}}": bootstrap_json,
     }
     html = SHARE_PAGE_TEMPLATE

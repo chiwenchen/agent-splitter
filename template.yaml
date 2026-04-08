@@ -21,12 +21,14 @@ Resources:
         AllowMethods:
           - GET
           - POST
+          - PUT
           - DELETE
           - OPTIONS
         AllowHeaders:
           - Content-Type
           - X-Api-Key
           - Cf-Access-Jwt-Assertion
+          - X-Device-Id
         MaxAge: 300
 
   ApiKeySecret:
@@ -176,6 +178,24 @@ Resources:
           Properties:
             Path: /v1/share/{id}
             Method: get
+            ApiId: !Ref SplitSettleApi
+        ShareAccountsList:
+          Type: HttpApi
+          Properties:
+            Path: /v1/share/{id}/accounts
+            Method: get
+            ApiId: !Ref SplitSettleApi
+        ShareAccountsPut:
+          Type: HttpApi
+          Properties:
+            Path: /v1/share/{id}/accounts/{participant}
+            Method: put
+            ApiId: !Ref SplitSettleApi
+        ShareAccountsDelete:
+          Type: HttpApi
+          Properties:
+            Path: /v1/share/{id}/accounts/{participant}
+            Method: delete
             ApiId: !Ref SplitSettleApi
         AppleAppSiteAssociation:
           Type: HttpApi

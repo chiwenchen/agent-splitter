@@ -16,6 +16,7 @@
         "cloudformation:CreateChangeSet",
         "cloudformation:DeleteChangeSet",
         "cloudformation:ExecuteChangeSet",
+        "cloudformation:ContinueUpdateRollback",
         "cloudformation:GetTemplate",
         "cloudformation:GetTemplateSummary",
         "cloudformation:ValidateTemplate",
@@ -67,15 +68,6 @@
       "Resource": "*"
     },
     {
-      "Sid": "ApiGatewayTagging",
-      "Effect": "Allow",
-      "Action": [
-        "apigateway:TagResource",
-        "apigateway:UntagResource"
-      ],
-      "Resource": "arn:aws:apigateway:ap-northeast-1::/apis/*"
-    },
-    {
       "Sid": "SecretsManager",
       "Effect": "Allow",
       "Action": [
@@ -89,6 +81,14 @@
         "secretsmanager:UntagResource"
       ],
       "Resource": "arn:aws:secretsmanager:ap-northeast-1:274571492950:secret:split-settle/*"
+    },
+    {
+      "Sid": "SecretsManagerGetRandomPassword",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetRandomPassword"
+      ],
+      "Resource": "*"
     },
     {
       "Sid": "IAMForLambdaRoles",
@@ -129,8 +129,11 @@
         "dynamodb:CreateTable",
         "dynamodb:DeleteTable",
         "dynamodb:DescribeTable",
+        "dynamodb:UpdateTable",
         "dynamodb:DescribeTimeToLive",
         "dynamodb:UpdateTimeToLive",
+        "dynamodb:DescribeContinuousBackups",
+        "dynamodb:UpdateContinuousBackups",
         "dynamodb:TagResource",
         "dynamodb:UntagResource",
         "dynamodb:ListTagsOfResource"

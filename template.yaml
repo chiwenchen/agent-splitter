@@ -19,11 +19,12 @@ Resources:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: split-settle/api-key-v2
-      Description: API Key for SplitSettle service (x-api-key header)
-      GenerateSecretString:
-        PasswordLength: 48
-        ExcludePunctuation: true
-        IncludeSpace: false
+      Description: |
+        API Key for SplitSettle service (x-api-key header).
+        Value populated post-deploy via:
+          aws secretsmanager put-secret-value --secret-id split-settle/api-key-v2 \
+            --secret-string "$(python3 -c 'import secrets; print(secrets.token_urlsafe(36))')"
+        Lambda fail-closes if this resolves to an empty string.
 
   AlchemySecret:
     Type: AWS::SecretsManager::Secret

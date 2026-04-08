@@ -92,8 +92,8 @@ Resources:
           PAYMENTS_TABLE: !Ref UsedPaymentsTable
           GROUPS_TABLE: !Ref GroupsTable
           ALLOWED_HOSTS: "split.redarch.dev,split-admin.redarch.dev"
-          CF_ACCESS_TEAM_DOMAIN: ""
-          CF_ACCESS_AUD: ""
+          CF_ACCESS_TEAM_DOMAIN: "redarch.cloudflareaccess.com"
+          CF_ACCESS_AUD: "92097101075a4b784478b1f54092148c842ccdd2f42724cb838a1bac7dc11d66"
           CF_ALLOWED_EMAIL: "cwchen2000@gmail.com"
           CF_API_TOKEN_ARN: "arn:aws:secretsmanager:ap-northeast-1:274571492950:secret:split-settle/cloudflare-api-token"
           CF_ZONE_ID: "2fdc064b300cf497b17c10d7e0bd9ab1"

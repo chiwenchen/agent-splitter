@@ -1597,3 +1597,84 @@ def test_share_page_bootstrap_includes_settlements():
     assert data["participants"] == ["Alice", "Bob"]
     assert len(data["settlements"]) == 1
     assert data["settlements"][0]["from"] == "Bob"
+
+
+def test_share_page_bill_details_rendered():
+    """Bill details section is rendered when request_body has expenses."""
+    result = {
+        "currency": "NT",
+        "total_expenses": 4500,
+        "settlements": [
+            {"from": "Bob", "to": "Alice", "amount": 1200},
+        ],
+        "summary": [
+            {"participant": "Alice"},
+            {"participant": "Bob"},
+            {"participant": "Charlie"},
+        ],
+    }
+    request_body = {
+        "expenses": [
+            {"description": "晚餐", "paid_by": "Alice", "amount": 2400,
+             "split_among": ["Alice", "Bob", "Charlie"]},
+            {"description": "飲料", "paid_by": "Alice", "amount": 600,
+             "split_among": ["Bob", "Charlie"]},
+            {"description": "計程車", "paid_by": "Bob", "amount": 1500,
+             "split_among": ["Alice", "Bob", "Charlie"]},
+        ],
+    }
+    html = handler._render_share_page(result, "2026-04-08T00:00:00Z",
+                                       si=None, share_id="bill123",
+                                       request_body=request_body)
+    assert "bill-details" in html
+    assert "帳單明細" in html
+    assert "（3 筆）" in html
+    assert "晚餐" in html
+    assert "飲料" in html
+    assert "計程車" in html
+    assert "Alice 付" in html
+    assert "Bob 付" in html
+    assert "分給 Alice, Bob, Charlie" in html
+
+
+def test_share_page_no_bill_details_without_expenses():
+    """No bill details <details> element when request_body has no expenses."""
+    result = {
+        "currency": "NT",
+        "total_expenses": 1000,
+        "settlements": [{"from": "Bob", "to": "Alice", "amount": 1000}],
+        "summary": [{"participant": "Alice"}, {"participant": "Bob"}],
+    }
+    html = handler._render_share_page(result, "2026-04-08T00:00:00Z",
+                                       si=None, share_id="nobill1")
+    # CSS class name will appear in <style>, but no <details> element
+    assert '<details class="bill-details">' not in html
+    assert "帳單明細" not in html
+
+
+def test_share_page_bill_details_xss():
+    """Bill details escapes user input (description, paid_by, split_among)."""
+    result = {
+        "currency": "NT",
+        "total_expenses": 100,
+        "settlements": [],
+        "summary": [{"participant": "<script>alert(1)</script>"}],
+    }
+    request_body = {
+        "expenses": [
+            {"description": "<img onerror=alert(1)>", "paid_by": "<b>evil</b>",
+             "amount": 100, "split_among": ["<script>alert(1)</script>"]},
+        ],
+    }
+    html = handler._render_share_page(result, "2026-04-08T00:00:00Z",
+                                       si=None, share_id="xss123",
+                                       request_body=request_body)
+    # Extract just the bill-details section
+    start = html.index('<details class="bill-details">')
+    end = html.index('</details>', start) + len('</details>')
+    bill_section = html[start:end]
+    assert "<script>" not in bill_section
+    assert "<img " not in bill_section
+    assert "<b>" not in bill_section
+    assert "&lt;img" in bill_section
+    assert "&lt;b&gt;" in bill_section

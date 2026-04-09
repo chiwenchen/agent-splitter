@@ -1246,6 +1246,23 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
                font-size:11px;color:#8aaa9e;margin-top:10px;
                box-shadow:inset -3px 3px 6px rgba(10,30,30,0.5),inset 3px -3px 6px rgba(60,100,100,0.15); }
     .check { color:#e8a84c; }
+
+    /* Bill details (collapsible) */
+    details.bill-details { background:#1e3636;border-radius:12px;padding:10px 14px;margin-top:10px;
+                           box-shadow:inset -2px 2px 5px rgba(10,30,30,0.5); }
+    details.bill-details summary { font-size:12px;color:#e8a84c;font-weight:700;cursor:pointer;
+                                   list-style:none;display:flex;justify-content:space-between;align-items:center; }
+    details.bill-details summary::after { content:'▼';font-size:9px;color:#8aaa9e;transition:transform 0.2s; }
+    details.bill-details[open] summary::after { transform:rotate(180deg); }
+    details.bill-details[open] summary { margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid rgba(90,122,112,0.3); }
+    .bill-item { display:flex;justify-content:space-between;align-items:flex-start;
+                 padding:6px 0;border-bottom:1px dashed rgba(90,122,112,0.3);gap:10px; }
+    .bill-item:last-child { border-bottom:none; }
+    .bill-desc { font-size:12px;color:#e0d5c4;flex:1;min-width:0; }
+    .bill-desc .paid-by { color:#8aaa9e;font-size:10px;display:block;margin-top:2px; }
+    .bill-desc .split { color:#5a7a70;font-size:10px;display:block; }
+    .bill-amount { font-size:13px;font-weight:700;color:#e8a84c;white-space:nowrap; }
+
     .cta { text-align:center;margin-top:24px;padding-top:16px;
            border-top:2px solid transparent;
            background-image:linear-gradient(#2d4a4a,#2d4a4a),linear-gradient(90deg,transparent,#e8a84c,#8aaa9e,#e8a84c,transparent);
@@ -1299,6 +1316,7 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
     <hr class="divider">
     {{settlements_html}}
     <div class="summary">{{num_settlements}} transfer{{s_plural}} to settle <span class="check">✓</span></div>
+    {{bill_details_html}}
     <div class="cta">
       <p>{{cta_q}}</p>
       <a href="/">{{cta_btn}}</a>
@@ -1521,7 +1539,7 @@ def _esc(s: str) -> str:
 
 
 def _render_share_page(result: dict, created_at: str = "", si: dict = None,
-                       share_id: str = "") -> str:
+                       share_id: str = "", request_body: dict = None) -> str:
     """Render the share page HTML from a split result."""
     currency_raw = result.get("currency", "")
     currency = _esc(currency_raw)
@@ -1547,7 +1565,38 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None,
         "modal_title": si.get("modal_title", "你是哪一位？"),
         "modal_body": si.get("modal_body", "選擇身分後，需要付錢給你的人才會看到你的帳號。"),
         "guest_label": si.get("guest", "我只是路人"),
+        "bill_title": si.get("bill_title", "帳單明細"),
+        "paid_by_suffix": si.get("paid_by_suffix", "付"),
+        "split_prefix": si.get("split_prefix", "分給"),
     }
+
+    # Build bill details HTML from request_body expenses
+    expenses = (request_body or {}).get("expenses", [])
+    n_expenses = len(expenses)
+    if n_expenses > 0:
+        bill_items_html = ""
+        for exp in expenses:
+            desc = _esc(exp.get("description", ""))
+            paid_by = _esc(exp.get("paid_by", ""))
+            amount = exp.get("amount", 0)
+            split_among = [_esc(p) for p in exp.get("split_among", [])]
+            bill_items_html += (
+                f'<div class="bill-item">'
+                f'<div class="bill-desc">{desc}'
+                f'<span class="paid-by">{paid_by} {_esc(labels["paid_by_suffix"])}</span>'
+                f'<span class="split">{_esc(labels["split_prefix"])} {", ".join(split_among)}</span>'
+                f'</div>'
+                f'<div class="bill-amount">{currency} {amount:,.2f}</div>'
+                f'</div>'
+            )
+        bill_details_html = (
+            f'<details class="bill-details">'
+            f'<summary>{_esc(labels["bill_title"])}（{n_expenses} 筆）· {currency} {total:,.2f}</summary>'
+            f'{bill_items_html}'
+            f'</details>'
+        )
+    else:
+        bill_details_html = ""
 
     bootstrap = {
         "share_id": share_id,
@@ -1600,6 +1649,7 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None,
         "{{edit_btn_label}}": _esc("分享轉帳帳號 ✏️"),
         "{{save_label}}": _esc("儲存"),
         "{{view_all_label}}": _esc(labels["view_all_label"]),
+        "{{bill_details_html}}": bill_details_html,
         "{{bootstrap_json}}": bootstrap_json,
     }
     html = SHARE_PAGE_TEMPLATE
@@ -1922,7 +1972,8 @@ def _handle_share_page(event):
     si = _SHARE_I18N.get(lang, _SHARE_I18N["en"])
 
     html_out = _render_share_page(data["result"], data["created_at"], si,
-                                  share_id=share_id)
+                                  share_id=share_id,
+                                  request_body=data.get("request_body"))
     return _html_response(200, html_out)
 
 

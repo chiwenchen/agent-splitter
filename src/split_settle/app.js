@@ -394,7 +394,7 @@ function App() {
     ` : ''}
 
     <div style="text-align:center;margin-top:24px;font-size:10px;color:var(--text-dim)">
-      <a href="/docs" style="color:var(--text-muted)">API Docs</a> · Powered by x402
+      Powered by Redarch
     </div>
   `;
 }

@@ -1129,7 +1129,7 @@ _DEAD_CODE_REMOVED = """
         ` : ''}
 
         <div style="text-align:center;margin-top:40px;font-size:11px;color:#444">
-          <a href="/docs" style="color:#555">API Docs</a> · Powered by x402
+          Powered by Redarch
         </div>
       `;
     }
@@ -1321,7 +1321,7 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
       <p>{{cta_q}}</p>
       <a href="/">{{cta_btn}}</a>
     </div>
-    <div class="footer"><a href="/docs">API Docs</a> · Powered by x402</div>
+    <div class="footer">Powered by Redarch</div>
   </div>
   <script>window.__SHARE = {{bootstrap_json}};</script>
   <script>

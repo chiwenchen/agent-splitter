@@ -975,6 +975,9 @@ _DEAD_CODE_REMOVED = """
                summary: participants.map(p => ({ name: p, paid: paid[p]/100, owed: owed[p]/100, balance: bal[p]/100 })) };
     }
 
+    const ZERO_DEC = new Set(['TWD','JPY','KRW','VND','IDR']);
+    function fmtAmt(c, n) { const d=ZERO_DEC.has(c)?0:2; return Number(n).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d}); }
+
     function App() {
       const [participants, setP] = useState(['']);
       const [expenses, setE] = useState([]);
@@ -1068,7 +1071,7 @@ _DEAD_CODE_REMOVED = """
                 <div class="meta">${e.paid_by} paid · split ${e.split_among.length} ways</div>
               </div>
               <div style="display:flex;align-items:center;gap:12px">
-                <span class="amount">${currency} ${e.amount.toLocaleString()}</span>
+                <span class="amount">${currency} ${fmtAmt(currency, e.amount)}</span>
                 <button onClick=${()=>removeExpense(i)}>x</button>
               </div>
             </div>
@@ -1100,11 +1103,11 @@ _DEAD_CODE_REMOVED = """
               <div class="result-item">
                 <span class="result-from">${s.from}</span> owes
                 <span class="result-to"> ${s.to}</span>
-                <span class="result-amount">${currency} ${s.amount.toLocaleString()}</span>
+                <span class="result-amount">${currency} ${fmtAmt(currency, s.amount)}</span>
               </div>
             `)}
             <div class="summary-line">
-              ${currency} ${result.total.toLocaleString()} total · ${result.settlements.length} transfer${result.settlements.length>1?'s':''} to settle <span class="check">✓</span>
+              ${currency} ${fmtAmt(currency, result.total)} total · ${result.settlements.length} transfer${result.settlements.length>1?'s':''} to settle <span class="check">✓</span>
             </div>
             ${shareUrl ? html`
               <div class="share-result">
@@ -1351,7 +1354,8 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
       });
     }
 
-    function fmt(n) { return Number(n).toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:2}); }
+    var ZERO_DEC = {TWD:1,JPY:1,KRW:1,VND:1,IDR:1};
+    function fmt(n) { var d=ZERO_DEC[SHARE.currency]?0:2; return Number(n).toLocaleString('en-US', {minimumFractionDigits:d, maximumFractionDigits:d}); }
 
     function totalsFor(name) {
       var owed = 0, owes = 0;
@@ -1586,12 +1590,12 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None,
                 f'<span class="paid-by">{paid_by} {_esc(labels["paid_by_suffix"])}</span>'
                 f'<span class="split">{_esc(labels["split_prefix"])} {", ".join(split_among)}</span>'
                 f'</div>'
-                f'<div class="bill-amount">{currency} {amount:,.2f}</div>'
+                f'<div class="bill-amount">{currency} {_format_amount(currency_raw, amount)}</div>'
                 f'</div>'
             )
         bill_details_html = (
             f'<details class="bill-details">'
-            f'<summary>{_esc(labels["bill_title"])}（{n_expenses} 筆）· {currency} {total:,.2f}</summary>'
+            f'<summary>{_esc(labels["bill_title"])}（{n_expenses} 筆）· {currency} {_format_amount(currency_raw, total)}</summary>'
             f'{bill_items_html}'
             f'</details>'
         )
@@ -1626,7 +1630,7 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None,
             f'<div class="sett-main">'
             f'<span><span class="from">{_esc(s["from"])}</span> → '
             f'<span class="to">{_esc(s["to"])}</span></span>'
-            f'<span class="amount">{currency} {s["amount"]:,.2f}</span>'
+            f'<span class="amount">{currency} {_format_amount(currency_raw, s["amount"])}</span>'
             f'</div>'
             f'</div>'
         )
@@ -1639,7 +1643,7 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None,
         "{{date}}": _esc(created_at[:10]) if created_at else "",
         "{{participants}}": ", ".join(names),
         "{{currency}}": currency,
-        "{{total}}": f"{total:,.2f}",
+        "{{total}}": _format_amount(currency_raw, total),
         "{{settlements_html}}": settlements_html,
         "{{num_settlements}}": str(n_sett),
         "{{s_plural}}": s_plural,
@@ -2575,7 +2579,7 @@ function ShareList({ items, onDelete }) {
             <td><code>${item.share_id}</code></td>
             <td>${(item.created_at || '').slice(0, 16).replace('T', ' ')}</td>
             <td>${item.currency}</td>
-            <td class="amount">${item.total.toLocaleString()}</td>
+            <td class="amount">${(({'TWD':1,'JPY':1,'KRW':1,'VND':1,'IDR':1})[item.currency]?item.total.toLocaleString(undefined,{maximumFractionDigits:0}):item.total.toLocaleString())}</td>
             <td>${item.participants_preview}</td>
             <td>
               <button class="outline" onClick=${() => window.open('https://split.redarch.dev/s/' + item.share_id, '_blank')}>View</button>

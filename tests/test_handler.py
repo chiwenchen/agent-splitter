@@ -1269,8 +1269,8 @@ def test_render_share_page_settlement_html():
     assert "Bob" in html and "Alice" in html and "Carol" in html
     assert 'style="--i:0"' in html
     assert 'style="--i:1"' in html
-    assert "TWD 300.00" in html
-    assert "TWD 200.00" in html
+    assert "TWD 300" in html
+    assert "TWD 200" in html
 
 
 def test_render_share_page_no_xss_via_participant_name():

@@ -1316,7 +1316,7 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
 
     <hr class="divider">
     {{settlements_html}}
-    <div class="summary">{{num_settlements}} transfer{{s_plural}} to settle <span class="check">✓</span></div>
+    <div class="summary">{{transfer_summary}} <span class="check">✓</span></div>
     {{bill_details_html}}
     <div class="cta">
       <p>{{cta_q}}</p>
@@ -1634,10 +1634,14 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None,
         )
 
     s_plural = "s" if n_sett != 1 else ""
+    transfer_summary_tpl = si.get("transfer_summary", "{n} transfer{s} to settle")
+    og_desc_tpl = si.get("og_desc", "{n} transfer{s} needed to settle")
+    transfer_summary_text = transfer_summary_tpl.format(n=n_sett, s=s_plural)
+    og_desc_text = og_desc_tpl.format(n=n_sett, s=s_plural)
     replacements = {
         "{{title}}": _esc(f"{currency_raw} {total:,.0f} split"),
         "{{og_title}}": _esc(f"Split: {currency_raw} {total:,.0f} between {len(names)} people"),
-        "{{og_desc}}": _esc(f"{n_sett} transfer{s_plural} needed to settle"),
+        "{{og_desc}}": _esc(og_desc_text),
         "{{date}}": _esc(created_at[:10]) if created_at else "",
         "{{participants}}": ", ".join(names),
         "{{currency}}": currency,
@@ -1645,6 +1649,7 @@ def _render_share_page(result: dict, created_at: str = "", si: dict = None,
         "{{settlements_html}}": settlements_html,
         "{{num_settlements}}": str(n_sett),
         "{{s_plural}}": s_plural,
+        "{{transfer_summary}}": _esc(transfer_summary_text),
         "{{share_title}}": _esc(si.get("title", "Split Senpai")),
         "{{cta_q}}": _esc(si.get("cta_q", "Need to split a bill?")),
         "{{cta_btn}}": _esc(si.get("cta", "Start splitting →")),
@@ -1952,9 +1957,12 @@ def _handle_share(event):
 
 
 _SHARE_I18N = {
-    "en": {"title": "Split Senpai", "iam": "I am...", "all": "All", "cta_q": "Need to split a bill?", "cta": "Start splitting →"},
-    "zh-TW": {"title": "分帳仙貝", "iam": "我是...", "all": "全部", "cta_q": "也要分帳？", "cta": "開始分帳 →"},
-    "ja": {"title": "割り勘先輩", "iam": "私は...", "all": "全部", "cta_q": "割り勘する？", "cta": "始める →"},
+    "en": {"title": "Split Senpai", "iam": "I am...", "all": "All", "cta_q": "Need to split a bill?", "cta": "Start splitting →",
+           "transfer_summary": "{n} transfer{s} to settle", "og_desc": "{n} transfer{s} needed to settle"},
+    "zh-TW": {"title": "分帳仙貝", "iam": "我是...", "all": "全部", "cta_q": "也要分帳？", "cta": "開始分帳 →",
+              "transfer_summary": "{n}筆轉帳即可結清", "og_desc": "{n}筆轉帳即可結清"},
+    "ja": {"title": "割り勘先輩", "iam": "私は...", "all": "全部", "cta_q": "割り勘する？", "cta": "始める →",
+           "transfer_summary": "{n}件の送金で精算完了", "og_desc": "{n}件の送金で精算完了"},
 }
 
 

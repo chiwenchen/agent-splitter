@@ -1186,7 +1186,6 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
     @media(max-width:460px){body{padding:0}.phone{border-radius:0;min-height:100vh}}
     h1 { font-size:22px;font-weight:800;color:#e8a84c;margin-bottom:2px; }
     .date { font-size:11px;color:#5a7a70;margin-bottom:14px; }
-    .total-line { font-size:12px;color:#8aaa9e;margin-bottom:14px; }
     .divider { border:none;height:2px;margin:16px 0;
                background:linear-gradient(90deg,transparent,#e8a84c,#8aaa9e,#e8a84c,transparent); }
 
@@ -1297,7 +1296,6 @@ SHARE_PAGE_TEMPLATE = """<!DOCTYPE html>
   <div class="phone">
     <h1>{{share_title}}</h1>
     <div class="date">{{date}}</div>
-    <div class="total-line">{{participants}} · Total: {{currency}} {{total}}</div>
 
     <div class="identity-card" id="identity-card" hidden>
       <div class="id-row">

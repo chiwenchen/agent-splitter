@@ -5,6 +5,12 @@ import Avatar from 'boring-avatars';
 
 const avatarColors = ['#1a2a5a','#3a5a9a','#7aa0d0','#b0c8e8','#e0e8f0'];
 
+const ZERO_DECIMAL_CURRENCIES = new Set(['TWD','JPY','KRW','VND','IDR']);
+function fmtAmt(currency, amount) {
+  const decimals = ZERO_DECIMAL_CURRENCIES.has(currency) ? 0 : 2;
+  return amount.toLocaleString(undefined, {minimumFractionDigits:decimals, maximumFractionDigits:decimals});
+}
+
 const i18n = {
   en: {
     title:'Split Senpai', subtitle:'Split expenses instantly. No registration needed.',
@@ -293,7 +299,7 @@ function App() {
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:10px">
-            <span class="amount">${currency} ${e.amount.toLocaleString()}</span>
+            <span class="amount">${currency} ${fmtAmt(currency, e.amount)}</span>
             <button onClick=${()=>removeExpense(i)}>x</button>
           </div>
         </div>
@@ -343,7 +349,7 @@ function App() {
               <div key=${i} style="margin-bottom:${i < groups.length - 1 ? '12px' : '0'};padding-bottom:${i < groups.length - 1 ? '12px;border-bottom:1px dashed #3a5e5e' : '0'}">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
                   <span style="font-size:13px;color:#e0d5c4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">${g.descs.join(' + ')}</span>
-                  <span style="font-weight:700;color:#e8a84c;font-size:14px;white-space:nowrap;flex-shrink:0">${currency} ${g.total.toLocaleString()}</span>
+                  <span style="font-weight:700;color:#e8a84c;font-size:14px;white-space:nowrap;flex-shrink:0">${currency} ${fmtAmt(currency, g.total)}</span>
                 </div>
                 <div style="display:flex;gap:8px">
                   ${g.members.map(n => html`<div key=${n} style="display:flex;align-items:center;gap:4px">
@@ -354,7 +360,7 @@ function App() {
             `);
           })()}
           <div style="text-align:right;margin-top:10px;padding-top:8px;border-top:1px solid #3a5e5e;font-size:12px;color:#8aaa9e">
-            總計 <span style="font-weight:800;color:#e8a84c;font-size:15px;margin-left:4px">${currency} ${result.total.toLocaleString()}</span>
+            總計 <span style="font-weight:800;color:#e8a84c;font-size:15px;margin-left:4px">${currency} ${fmtAmt(currency, result.total)}</span>
           </div>
         </div>
 
@@ -364,12 +370,12 @@ function App() {
               <${Av} name=${s.from} size=${28} />
               <span><span class="result-from">${s.from}</span><span class="result-arrow"> → </span><span class="result-to">${s.to}</span></span>
             </div>
-            <span class="result-amount">${currency} ${s.amount.toLocaleString()}</span>
+            <span class="result-amount">${currency} ${fmtAmt(currency, s.amount)}</span>
           </div>
         `)}
 
         <div class="summary-line">
-          ${currency} ${result.total.toLocaleString()} ${t.total} · ${nSett} ${nSett>1?t.transfers:t.transfer} ${t.toSettle} <span class="check">✓</span>
+          ${currency} ${fmtAmt(currency, result.total)} ${t.total} · ${nSett} ${nSett>1?t.transfers:t.transfer} ${t.toSettle} <span class="check">✓</span>
         </div>
 
         ${shareUrl ? html`

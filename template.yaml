@@ -161,6 +161,12 @@ Resources:
             Path: /
             Method: get
             ApiId: !Ref SplitSettleApi
+        OgImage:
+          Type: HttpApi
+          Properties:
+            Path: /og-image.png
+            Method: get
+            ApiId: !Ref SplitSettleApi
         ShareApi:
           Type: HttpApi
           Properties:

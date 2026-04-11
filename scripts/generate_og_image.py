@@ -25,32 +25,39 @@ MUTED = (138, 170, 158)  # --text-muted #8aaa9e
 
 WIDTH, HEIGHT = 1200, 630
 
-# Font discovery (CJK-capable, fallback chain)
-FONT_CANDIDATES_BOLD = [
-    ("/System/Library/Fonts/PingFang.ttc", 4),  # macOS Heavy
-    ("/System/Library/Fonts/PingFang.ttc", 3),  # macOS Semibold
-    ("/System/Library/Fonts/STHeiti Medium.ttc", 0),
-    ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", 0),
-]
-FONT_CANDIDATES_REG = [
-    ("/System/Library/Fonts/PingFang.ttc", 1),  # macOS Regular
-    ("/System/Library/Fonts/STHeiti Light.ttc", 0),
-    ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
+# PingFang.ttc face index layout (verified by ImageFont.getname()):
+#   0=HK Reg  1=MO Reg  2=TC Reg  3=SC Reg
+#   4=HK Med  5=MO Med  6=TC Med  7=SC Med
+#   8=HK Semi 9=MO Semi 10=TC Semi 11=SC Semi
+#   12=HK Light ... 16=HK Thin ... 20=HK Ultra
+PINGFANG_TC_SEMIBOLD = 10
+PINGFANG_TC_MEDIUM = 6
+PINGFANG_TC_REGULAR = 2
+
+# Path candidates: macOS 14+ relocated fonts to AssetsV2 with hashed paths.
+# We probe both the modern hashed location and the legacy stable path.
+PINGFANG_PATHS = [
+    "/System/Library/AssetsV2/com_apple_MobileAsset_Font8/86ba2c91f017a3749571a82f2c6d890ac7ffb2fb.asset/AssetData/PingFang.ttc",
+    "/System/Library/Fonts/PingFang.ttc",
 ]
 
 
-def _load(size: int, candidates: list) -> ImageFont.FreeTypeFont:
-    """Load the first available CJK-capable font at the given size."""
-    for path, idx in candidates:
-        if Path(path).exists():
-            try:
-                return ImageFont.truetype(path, size, index=idx)
-            except Exception:
-                continue
+def _resolve_pingfang() -> str:
+    """Find PingFang.ttc on this system."""
+    for p in PINGFANG_PATHS:
+        if Path(p).exists():
+            return p
+    # Fall back: any PingFang.ttc anywhere in /System/Library
+    candidates = list(Path("/System/Library").rglob("PingFang.ttc"))
+    if candidates:
+        return str(candidates[0])
     raise RuntimeError(
-        "No CJK-capable font found. Install fonts-noto-cjk on Linux "
-        "or run on macOS where PingFang.ttc ships with the OS."
+        "PingFang.ttc not found. Run on macOS where it ships with the OS."
     )
+
+
+def _load(font_path: str, index: int, size: int) -> ImageFont.FreeTypeFont:
+    return ImageFont.truetype(font_path, size, index=index)
 
 
 def _center_text(draw: ImageDraw.ImageDraw, text: str, font, y: int, fill) -> int:
@@ -62,6 +69,7 @@ def _center_text(draw: ImageDraw.ImageDraw, text: str, font, y: int, fill) -> in
 
 
 def main() -> None:
+    pingfang = _resolve_pingfang()
     img = Image.new("RGB", (WIDTH, HEIGHT), BG)
     draw = ImageDraw.Draw(img)
 
@@ -69,8 +77,8 @@ def main() -> None:
     pad = 24
     draw.rectangle([pad, pad, WIDTH - pad, HEIGHT - pad], outline=ACCENT, width=2)
 
-    # Brand title
-    title_font = _load(170, FONT_CANDIDATES_BOLD)
+    # Brand title — PingFang TC Semibold (heaviest weight in PingFang.ttc)
+    title_font = _load(pingfang, PINGFANG_TC_SEMIBOLD, 170)
     title_y = 170
     title_h = _center_text(draw, "分帳仙貝", title_font, y=title_y, fill=ACCENT)
 
@@ -82,12 +90,12 @@ def main() -> None:
         fill=ACCENT,
     )
 
-    # Tagline
-    tag_font = _load(48, FONT_CANDIDATES_REG)
+    # Tagline — PingFang TC Medium
+    tag_font = _load(pingfang, PINGFANG_TC_MEDIUM, 48)
     _center_text(draw, "三步驟完成分帳", tag_font, y=bar_y + bar_h + 36, fill=TEXT)
 
-    # URL footer
-    url_font = _load(28, FONT_CANDIDATES_REG)
+    # URL footer — PingFang TC Regular
+    url_font = _load(pingfang, PINGFANG_TC_REGULAR, 28)
     _center_text(draw, "split.redarch.dev", url_font, y=HEIGHT - 80, fill=MUTED)
 
     # Asset lives next to handler.py so SAM packages it automatically

@@ -9,7 +9,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from ta_mapping import normalize_ta, resolve_subtitle
+from ta_mapping import TA_KEYS, TA_SUBTITLES, normalize_ta, resolve_subtitle
 
 logger = logging.getLogger(__name__)
 
@@ -1042,6 +1042,205 @@ except FileNotFoundError:
     _OG_IMAGE_B64 = ""
 
 
+# ---------------------------------------------------------------------------
+# Share link picker — GET /share renders a static page listing every ta key
+# (in zh-TW) so the operator can tap a card to copy the corresponding
+# https://split.redarch.dev/?ta=<key> URL to clipboard. No Preact, no
+# build step — pure HTML + a tiny inline copy helper.
+# ---------------------------------------------------------------------------
+
+_SHARE_PICKER_TEMPLATE = """<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>分帳仙貝 - 分享連結</title>
+  <style>
+    :root {
+      --layer-0:#d5d0c8; --layer-1:#2d4a4a; --layer-2:#1e3636;
+      --accent:#e8a84c; --accent-dark:#c88830;
+      --text-on-dark:#e0d5c4; --text-muted:#8aaa9e; --text-dim:#5a7a70;
+      --border:#3a5e5e;
+      --r-card:14px; --r-outer:24px;
+      --neu-out:4px 4px 8px rgba(10,30,30,0.4),-2px -2px 4px rgba(60,100,100,0.1);
+      --neu-in:inset -3px 3px 6px rgba(10,30,30,0.5),inset 3px -3px 6px rgba(60,100,100,0.15);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    button { font:inherit; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+    body {
+      font-family:'Inter',-apple-system,system-ui,sans-serif;
+      background:var(--layer-0);
+      min-height:100vh;
+      display:flex; justify-content:center;
+      padding:16px;
+    }
+    .container {
+      width:100%; max-width:480px;
+      background:var(--layer-1);
+      border-radius:var(--r-outer);
+      padding:28px 22px;
+      color:var(--text-on-dark);
+      box-shadow:12px 12px 12px rgba(30,50,50,0.4);
+      margin:0 auto;
+    }
+    @media(max-width:460px) { body{padding:0} .container{border-radius:0;min-height:100vh} }
+    .header { text-align:center; margin-bottom:22px; }
+    h1 { font-size:24px; font-weight:800; color:var(--accent); margin-bottom:4px; }
+    .subtitle { font-size:13px; color:var(--text-muted); }
+    .hint {
+      font-size:11px; color:var(--text-dim);
+      text-align:center;
+      margin-bottom:20px;
+      letter-spacing:0.5px;
+    }
+
+    .ta-list { display:flex; flex-direction:column; gap:10px; }
+
+    .ta-card {
+      background:var(--layer-2);
+      border:none;
+      border-radius:var(--r-card);
+      padding:14px 16px;
+      width:100%;
+      text-align:left;
+      cursor:pointer;
+      box-shadow:var(--neu-out);
+      color:var(--text-on-dark);
+      transition:transform 0.12s, box-shadow 0.12s;
+      position:relative;
+      overflow:hidden;
+    }
+    .ta-card:hover { transform:translateY(-1px); }
+    .ta-card:active { box-shadow:var(--neu-in); transform:translateY(0); }
+    .ta-card.copied {
+      background:linear-gradient(135deg,var(--accent),var(--accent-dark));
+      color:var(--layer-2);
+    }
+    .ta-card.copied .ta-key { color:rgba(30,54,54,0.55); }
+    .ta-card.copied .ta-url { color:rgba(30,54,54,0.5); }
+    .ta-card.copied .copied-badge { opacity:1; }
+
+    .ta-key {
+      font-size:10px;
+      font-weight:700;
+      color:var(--text-dim);
+      text-transform:uppercase;
+      letter-spacing:1.2px;
+      font-family:'SF Mono',Menlo,monospace;
+      margin-bottom:4px;
+      transition:color 0.12s;
+    }
+    .ta-subtitle {
+      font-size:15px;
+      font-weight:700;
+      margin-bottom:3px;
+      line-height:1.3;
+    }
+    .ta-url {
+      font-size:11px;
+      color:var(--text-dim);
+      font-family:'SF Mono',Menlo,monospace;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+      transition:color 0.12s;
+    }
+    .copied-badge {
+      position:absolute;
+      top:50%; right:14px;
+      transform:translateY(-50%);
+      font-size:11px;
+      font-weight:800;
+      background:var(--layer-1);
+      color:var(--accent);
+      padding:5px 12px;
+      border-radius:8px;
+      opacity:0;
+      transition:opacity 0.18s;
+      pointer-events:none;
+      letter-spacing:0.8px;
+    }
+
+    .footer-link {
+      display:block;
+      text-align:center;
+      margin-top:24px;
+      font-size:12px;
+      color:var(--text-muted);
+      text-decoration:none;
+    }
+    .footer-link:hover { color:var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>分享連結</h1>
+      <div class="subtitle">選擇場景，自動複製連結</div>
+    </div>
+    <div class="hint">點擊卡片即複製到剪貼簿</div>
+
+    <div class="ta-list">
+{{cards_html}}
+    </div>
+
+    <a class="footer-link" href="/">← 回到分帳仙貝</a>
+  </div>
+
+  <script>
+    function copyToClipboard(text, card) {
+      // Sync fallback first (works without permission prompts)
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      // Async clipboard API as best-effort secondary
+      if (navigator.clipboard) {
+        try { navigator.clipboard.writeText(text); } catch (e) {}
+      }
+      // Visual feedback
+      document.querySelectorAll('.ta-card.copied').forEach(function(el){ el.classList.remove('copied'); });
+      card.classList.add('copied');
+      setTimeout(function(){ card.classList.remove('copied'); }, 1500);
+    }
+  </script>
+</body>
+</html>"""
+
+
+def _render_share_picker(event: dict) -> str:
+    """Render /share — list of all ta keys with click-to-copy URLs."""
+    headers = event.get("headers") or {}
+    host = (
+        headers.get("x-forwarded-host")
+        or headers.get("host")
+        or "split.redarch.dev"
+    ).split(":", 1)[0]
+    proto = headers.get("x-forwarded-proto", "https")
+    base = f"{proto}://{host}"
+
+    cards = []
+    for ta_key in TA_KEYS:
+        subtitle = TA_SUBTITLES["zh-TW"][ta_key]
+        url = base if ta_key == "default" else f"{base}/?ta={ta_key}"
+        cards.append(
+            "      <button type=\"button\" class=\"ta-card\" "
+            f"onclick=\"copyToClipboard('{_esc(url)}', this)\">"
+            f"<div class=\"ta-key\">{_esc(ta_key)}</div>"
+            f"<div class=\"ta-subtitle\">{_esc(subtitle)}</div>"
+            f"<div class=\"ta-url\">{_esc(url)}</div>"
+            "<div class=\"copied-badge\">已複製</div>"
+            "</button>"
+        )
+    cards_html = "\n".join(cards)
+    return _SHARE_PICKER_TEMPLATE.replace("{{cards_html}}", cards_html)
+
+
 def _render_app_html(event: dict) -> str:
     """Inject ta-aware OG meta + canonical URL into APP_HTML.
 
@@ -1865,6 +2064,7 @@ _ROUTE_METHODS = {
     "/docs": "GET",
     "/": "GET",
     "/og-image.png": "GET",
+    "/share": "GET",
     "/v1/share": "POST",
     "/v1/split_settle": "POST",
     "/v1/groups": "POST",
@@ -1939,6 +2139,9 @@ def lambda_handler(event, context):
 
     if path == "/og-image.png":
         return _og_image_response()
+
+    if path == "/share":
+        return _html_response(200, _render_share_picker(event))
 
     if path == "/.well-known/apple-app-site-association":
         if not _APPLE_APP_ID:

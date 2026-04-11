@@ -202,6 +202,7 @@ def test_root_falls_back_to_default_host_when_no_headers():
         ("roommate", "室友同住，輕鬆分攤"),
         ("family", "家庭時光，輕鬆分帳"),
         ("work", "同事聚會，輕鬆分帳"),
+        ("shopping", "享受購物，輕鬆分帳"),
     ],
 )
 def test_all_ta_keys_render_correct_subtitle(ta, expected):

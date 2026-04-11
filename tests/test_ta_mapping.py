@@ -29,6 +29,7 @@ from ta_mapping import TA_KEYS, TA_SUBTITLES, normalize_ta, resolve_subtitle
         ("roommate", "roommate"),
         ("family", "family"),
         ("work", "work"),
+        ("shopping", "shopping"),
         ("default", "default"),
         ("foo", "default"),
         ("123", "default"),
@@ -80,7 +81,10 @@ def test_resolve_subtitle_handles_case_insensitive_ta():
 
 
 def test_ta_keys_set_is_complete():
-    expected = {"default", "camping", "travel", "dining", "roommate", "family", "work"}
+    expected = {
+        "default", "camping", "travel", "dining",
+        "roommate", "family", "work", "shopping",
+    }
     assert set(TA_KEYS) == expected
 
 

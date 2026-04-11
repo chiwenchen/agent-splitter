@@ -22,6 +22,7 @@ TA_KEYS: tuple[str, ...] = (
     "roommate",
     "family",
     "work",
+    "shopping",
 )
 
 TA_SUBTITLES: dict[str, dict[str, str]] = {
@@ -33,6 +34,7 @@ TA_SUBTITLES: dict[str, dict[str, str]] = {
         "roommate": "室友同住，輕鬆分攤",
         "family":   "家庭時光，輕鬆分帳",
         "work":     "同事聚會，輕鬆分帳",
+        "shopping": "享受購物，輕鬆分帳",
     },
     "en": {
         "default":  "Hang out with friends, split with ease",
@@ -42,6 +44,7 @@ TA_SUBTITLES: dict[str, dict[str, str]] = {
         "roommate": "Share the place, split the rent",
         "family":   "Family time, split with ease",
         "work":     "Team gatherings, split with ease",
+        "shopping": "Enjoy the haul, split with ease",
     },
     "ja": {
         "default":  "友だちと楽しく、かんたん割り勘",
@@ -51,6 +54,7 @@ TA_SUBTITLES: dict[str, dict[str, str]] = {
         "roommate": "ルームシェアでも、かんたん割り勘",
         "family":   "家族の時間、かんたん割り勘",
         "work":     "職場の集まり、かんたん割り勘",
+        "shopping": "ショッピングを楽しんで、かんたん割り勘",
     },
 }
 

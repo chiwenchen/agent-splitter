@@ -7,7 +7,7 @@ const avatarColors = ['#1a2a5a','#3a5a9a','#7aa0d0','#b0c8e8','#e0e8f0'];
 
 // ta_mapping mirror — kept in sync with src/split_settle/ta_mapping.py via
 // tests/test_ta_mapping_js_parity.py. If you change one, change the other.
-const TA_KEYS = ['default','camping','travel','dining','roommate','family','work'];
+const TA_KEYS = ['default','camping','travel','dining','roommate','family','work','shopping'];
 
 const taSubtitles = {
   en: {
@@ -18,6 +18,7 @@ const taSubtitles = {
     roommate: 'Share the place, split the rent',
     family:   'Family time, split with ease',
     work:     'Team gatherings, split with ease',
+    shopping: 'Enjoy the haul, split with ease',
   },
   'zh-TW': {
     default:  '與朋友同樂，輕鬆分帳',
@@ -27,6 +28,7 @@ const taSubtitles = {
     roommate: '室友同住，輕鬆分攤',
     family:   '家庭時光，輕鬆分帳',
     work:     '同事聚會，輕鬆分帳',
+    shopping: '享受購物，輕鬆分帳',
   },
   ja: {
     default:  '友だちと楽しく、かんたん割り勘',
@@ -36,6 +38,7 @@ const taSubtitles = {
     roommate: 'ルームシェアでも、かんたん割り勘',
     family:   '家族の時間、かんたん割り勘',
     work:     '職場の集まり、かんたん割り勘',
+    shopping: 'ショッピングを楽しんで、かんたん割り勘',
   },
 };
 

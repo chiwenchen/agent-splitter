@@ -1146,14 +1146,23 @@ def test_home_page_has_importmap():
 
 
 def test_home_page_has_app_name():
-    """Home page should contain the app name in i18n."""
+    """Home page should contain the unified brand name 分帳仙貝.
+
+    All three languages now share the brand `分帳仙貝` (the old en
+    `Split Senpai` and ja `割り勘先輩` were removed in favour of a
+    single global brand)."""
     event = {"rawPath": "/", "requestContext": {"http": {"method": "GET"}}}
     response = lambda_handler(event, {})
     body = response["body"]
-    # Check all three language titles are in the JS
-    assert "Split Senpai" in body
-    assert "分帳仙貝" in body
-    assert "割り勘先輩" in body
+    # The brand name appears in the page title, og:title, og:site_name,
+    # og:image:alt, and three i18n table entries — at least 6 times.
+    assert body.count("分帳仙貝") >= 6, (
+        f"Expected 分帳仙貝 to appear in the body multiple times, "
+        f"got {body.count('分帳仙貝')}"
+    )
+    # Old brand names removed
+    assert "Split Senpai" not in body
+    assert "割り勘先輩" not in body
 
 
 def test_share_with_lang_param(share_env):

@@ -1,9 +1,53 @@
 import { h, render } from 'preact';
-import { useState } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 import { html } from 'htm/preact';
 import Avatar from 'boring-avatars';
 
 const avatarColors = ['#1a2a5a','#3a5a9a','#7aa0d0','#b0c8e8','#e0e8f0'];
+
+// ta_mapping mirror — kept in sync with src/split_settle/ta_mapping.py via
+// tests/test_ta_mapping_js_parity.py. If you change one, change the other.
+const TA_KEYS = ['default','camping','travel','dining','roommate','family','work'];
+
+const taSubtitles = {
+  en: {
+    default:  'Hang out with friends, split with ease',
+    camping:  'Enjoy the campsite, split with ease',
+    travel:   'Travel together, split with ease',
+    dining:   'Share the meal, split with ease',
+    roommate: 'Share the place, split the rent',
+    family:   'Family time, split with ease',
+    work:     'Team gatherings, split with ease',
+  },
+  'zh-TW': {
+    default:  '與朋友同樂，輕鬆分帳',
+    camping:  '享受露營，輕鬆分帳',
+    travel:   '享受旅行，輕鬆分帳',
+    dining:   '享受美食，輕鬆分帳',
+    roommate: '室友同住，輕鬆分攤',
+    family:   '家庭時光，輕鬆分帳',
+    work:     '同事聚會，輕鬆分帳',
+  },
+  ja: {
+    default:  '友だちと楽しく、かんたん割り勘',
+    camping:  'キャンプを楽しんで、かんたん割り勘',
+    travel:   '旅を楽しんで、かんたん割り勘',
+    dining:   '食事を楽しんで、かんたん割り勘',
+    roommate: 'ルームシェアでも、かんたん割り勘',
+    family:   '家族の時間、かんたん割り勘',
+    work:     '職場の集まり、かんたん割り勘',
+  },
+};
+
+function getTa() {
+  try {
+    const raw = new URLSearchParams(window.location.search).get('ta') || '';
+    const key = raw.trim().toLowerCase();
+    return TA_KEYS.includes(key) ? key : 'default';
+  } catch (e) { return 'default'; }
+}
+
+const INTRO_SEEN_KEY = 'ss_seen_intro';
 
 const ZERO_DECIMAL_CURRENCIES = new Set(['TWD','JPY','KRW','VND','IDR']);
 function fmtAmt(currency, amount) {
@@ -13,7 +57,7 @@ function fmtAmt(currency, amount) {
 
 const i18n = {
   en: {
-    title:'Split Senpai', subtitle:'Split expenses instantly. No registration needed.',
+    title:'分帳仙貝', subtitle:'Split expenses instantly. No registration needed.',
     participants:'Participants', addName:'Add a name...', expenses:'Expenses',
     addExpense:'+ Add Expense', description:'Item description (optional)', amount:'Amount',
     splitAmong:'Split among', add:'Add', cancel:'Cancel',
@@ -23,6 +67,13 @@ const i18n = {
     linkCreated:'Link created!', copyLink:'Copy Link', share:'Share',
     validFor:'Valid for 30 days', allSettled:'Everyone is settled up!',
     expense:'Expense', paid:'paid', splitWays:'ways', lang:'EN',
+    introWelcomeEyebrow:'WELCOME',
+    introTitle:'Welcome to 分帳仙貝',
+    introTagline:'Three quick steps to settle up',
+    introStep1:'Add your friends',
+    introStep2:'Add the expenses',
+    introStep3:'Share the link',
+    introCta:'Get started',
   },
   'zh-TW': {
     title:'分帳仙貝', subtitle:'秒算分帳，免註冊、免下載',
@@ -35,9 +86,16 @@ const i18n = {
     linkCreated:'連結已產生！', copyLink:'複製連結', share:'分享',
     validFor:'30 天內有效', allSettled:'全部結清！不用轉帳',
     expense:'消費', paid:'墊付', splitWays:'人分', lang:'中',
+    introWelcomeEyebrow:'WELCOME',
+    introTitle:'歡迎使用 分帳仙貝',
+    introTagline:'三個步驟，輕鬆完成分帳',
+    introStep1:'加入朋友',
+    introStep2:'添加帳單',
+    introStep3:'分享分帳連結',
+    introCta:'開始分帳',
   },
   ja: {
-    title:'割り勘先輩', subtitle:'割り勘を即計算。登録不要。',
+    title:'分帳仙貝', subtitle:'割り勘を即計算。登録不要。',
     participants:'参加者', addName:'名前を入力...', expenses:'支出',
     addExpense:'+ 支出を追加', description:'品目の説明（任意）', amount:'金額',
     splitAmong:'割り勘メンバー', add:'追加', cancel:'キャンセル',
@@ -47,6 +105,13 @@ const i18n = {
     linkCreated:'リンクを作成しました！', copyLink:'リンクをコピー', share:'シェア',
     validFor:'30日間有効', allSettled:'全員精算済み！',
     expense:'支出', paid:'が支払い', splitWays:'人で割り勘', lang:'JA',
+    introWelcomeEyebrow:'ようこそ',
+    introTitle:'分帳仙貝へようこそ',
+    introTagline:'3ステップでかんたん割り勘',
+    introStep1:'友だちを追加',
+    introStep2:'支出を追加',
+    introStep3:'リンクを共有',
+    introCta:'はじめる',
   },
 };
 
@@ -196,6 +261,31 @@ function splitSettle(participants, expenses, currency) {
 
 const langOrder = ['en', 'zh-TW', 'ja'];
 
+function IntroModal({ t, onDismiss }) {
+  return html`
+    <div class="intro-overlay" onClick=${onDismiss} role="dialog" aria-modal="true" aria-labelledby="intro-title">
+      <div class="intro-card" onClick=${e => e.stopPropagation()}>
+        <div class="intro-eyebrow">${t.introWelcomeEyebrow}</div>
+        <h2 class="intro-title" id="intro-title">${t.introTitle}</h2>
+        <div class="intro-tagline">${t.introTagline}</div>
+        <div class="intro-step">
+          <span class="intro-num">1</span>
+          <span class="intro-text">${t.introStep1}</span>
+        </div>
+        <div class="intro-step">
+          <span class="intro-num">2</span>
+          <span class="intro-text">${t.introStep2}</span>
+        </div>
+        <div class="intro-step">
+          <span class="intro-num">3</span>
+          <span class="intro-text">${t.introStep3}</span>
+        </div>
+        <button class="intro-cta" onClick=${onDismiss} type="button">${t.introCta}</button>
+      </div>
+    </div>
+  `;
+}
+
 function App() {
   const [lang, setLang] = useState(detectLang());
   const [participants, setP] = useState(['']);
@@ -212,10 +302,29 @@ function App() {
   const [error, setError] = useState('');
   const [addHint, setAddHint] = useState(false);
   const [firstExpenseHint, setFirstExpenseHint] = useState(true);
+  const [showIntro, setShowIntro] = useState(false);
   const t = i18n[lang];
+  const ta = getTa();
+  const subtitle = (taSubtitles[lang] && taSubtitles[lang][ta])
+    || (taSubtitles[lang] && taSubtitles[lang].default)
+    || t.subtitle;
   const names = participants.filter(p => p.trim());
   const result = splitSettle(names, expenses, currency);
   const nSett = result ? result.settlements.length : 0;
+
+  // First-visit onboarding gate (localStorage)
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem(INTRO_SEEN_KEY)) {
+        setShowIntro(true);
+      }
+    } catch (e) { /* private mode: just don't show */ }
+  }, []);
+
+  function dismissIntro() {
+    setShowIntro(false);
+    try { localStorage.setItem(INTRO_SEEN_KEY, '1'); } catch (e) {}
+  }
 
   function cycleLang() { const i=(langOrder.indexOf(lang)+1)%langOrder.length; const n=langOrder[i]; setLang(n); localStorage.setItem('ss_lang',n); }
   function addName() { if(!newName.trim()||names.includes(newName.trim()))return; setP([...participants.filter(p=>p.trim()),newName.trim(),'']); setNewName(''); }
@@ -258,8 +367,9 @@ function App() {
   function webShare(){if(navigator.share)navigator.share({title:'SplitSettle',text:t.shareResults,url:shareUrl})}
 
   return html`
+    ${showIntro ? html`<${IntroModal} t=${t} onDismiss=${dismissIntro} />` : ''}
     <div class="header-row">
-      <div><h1>${t.title}</h1><div class="subtitle">${t.subtitle}</div></div>
+      <div><h1>${t.title}</h1><div class="subtitle">${subtitle}</div></div>
       <button class="lang-btn" onClick=${cycleLang}>${t.lang}</button>
     </div>
 

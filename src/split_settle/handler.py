@@ -947,6 +947,71 @@ _APP_HTML_TEMPLATE = """<!DOCTYPE html>
     .input-orbit:focus-within { background:#e8a84c; }
     .input-orbit:focus-within::before { animation:none;display:none; }
     .input-orbit input { position:relative;z-index:1;border-radius:12px; }
+    /* Onboarding intro modal (first-visit, localStorage gated) */
+    .intro-overlay {
+      position:fixed; inset:0;
+      background:rgba(15,28,28,0.78);
+      backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+      display:flex; align-items:center; justify-content:center;
+      padding:18px; z-index:1000;
+      animation:introFadeIn 0.25s ease-out;
+    }
+    @keyframes introFadeIn { from {opacity:0} to {opacity:1} }
+    .intro-card {
+      width:100%; max-width:380px;
+      background:var(--layer-1);
+      border-radius:20px;
+      padding:24px 22px 22px;
+      color:var(--text-on-dark);
+      box-shadow: 6px 6px 14px rgba(10,30,30,0.5),
+                  -2px -2px 8px rgba(60,100,100,0.15),
+                  0 0 0 1px rgba(232,168,76,0.18);
+      animation:introPopIn 0.3s cubic-bezier(0.2,0.9,0.3,1.2);
+    }
+    @keyframes introPopIn {
+      from { opacity:0; transform:scale(0.92) translateY(8px); }
+      to   { opacity:1; transform:scale(1) translateY(0); }
+    }
+    .intro-eyebrow {
+      font-size:10px; font-weight:700; color:var(--text-muted);
+      text-transform:uppercase; letter-spacing:1.5px;
+      text-align:center; margin-bottom:6px;
+    }
+    .intro-title {
+      font-size:21px; font-weight:800; color:var(--accent);
+      text-align:center; margin:0 0 6px;
+    }
+    .intro-tagline {
+      font-size:12px; color:var(--text-muted);
+      text-align:center; margin-bottom:18px;
+    }
+    .intro-step {
+      display:flex; align-items:center; gap:12px;
+      padding:11px 12px;
+      background:var(--layer-2);
+      border-radius:12px;
+      margin-bottom:8px;
+      box-shadow:var(--neu-in);
+    }
+    .intro-num {
+      flex-shrink:0;
+      width:26px; height:26px; border-radius:50%;
+      background:linear-gradient(135deg,var(--accent),var(--accent-dark));
+      color:var(--layer-2);
+      font-weight:800; font-size:13px;
+      display:flex; align-items:center; justify-content:center;
+      box-shadow:2px 2px 4px rgba(10,30,30,0.4);
+    }
+    .intro-text { font-size:13px; font-weight:600; color:var(--text-on-dark); }
+    .intro-cta {
+      width:100%; margin-top:14px;
+      background:linear-gradient(135deg,var(--accent),var(--accent-dark));
+      color:var(--layer-2); border:none; border-radius:12px;
+      padding:13px; font-size:13px; font-weight:800;
+      box-shadow:var(--neu-out);
+      cursor:pointer;
+    }
+    .intro-cta:active { box-shadow:var(--neu-in); }
   </style>
   <script type="importmap">{"imports":{"preact":"https://esm.sh/preact@10.25.4","preact/hooks":"https://esm.sh/preact@10.25.4/hooks","htm/preact":"https://esm.sh/htm@3.1.1/preact?external=preact","react":"https://esm.sh/preact@10.25.4/compat","boring-avatars":"https://esm.sh/boring-avatars@1?external=react"}}</script>
 </head>

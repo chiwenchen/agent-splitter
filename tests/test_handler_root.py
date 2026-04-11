@@ -65,11 +65,20 @@ def test_root_no_ta_title_starts_with_brand():
 
 
 def test_root_ta_camping_replaces_subtitle_in_meta():
+    """When ?ta=camping, OG meta tags should use the camping subtitle.
+
+    Note: the default subtitle string ("與朋友同樂，輕鬆分帳") still
+    appears in the body because the SPA's i18n table is inlined into the
+    HTML. We only assert that the OG meta tag values are correct.
+    """
     resp = _invoke(_root_event(ta="camping"))
     body = resp["body"]
-    assert "享受露營，輕鬆分帳" in body
-    # Default subtitle should NOT appear
-    assert "與朋友同樂，輕鬆分帳" not in body
+    # The page title and OG meta should reflect camping
+    assert '<title>分帳仙貝 - 享受露營，輕鬆分帳</title>' in body
+    assert 'content="分帳仙貝 - 享受露營，輕鬆分帳"' in body  # og:title / twitter:title
+    assert 'content="享受露營，輕鬆分帳"' in body  # og:description
+    # Default subtitle MUST NOT appear in the OG title attribute
+    assert 'content="分帳仙貝 - 與朋友同樂，輕鬆分帳"' not in body
 
 
 def test_root_ta_camping_title_includes_subtitle():
